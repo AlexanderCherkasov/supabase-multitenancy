@@ -22,9 +22,8 @@
     }
   },
   "files": [
-    "dist",
+    "dist/src",
     "sql",
-    "tests",
     "examples",
     "ARCHITECTURE.md",
     "SECURITY.md",
@@ -32,6 +31,17 @@
     "README.md",
     "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexanderCherkasov/supabase-multitenancy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AlexanderCherkasov/supabase-multitenancy/issues"
+  },
+  "homepage": "https://github.com/AlexanderCherkasov/supabase-multitenancy#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@supabase/supabase-js": "^2.39.0"
   },
@@ -44,18 +54,21 @@
     "build": "npm run build:sql && tsc",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/tests/unit/*.test.js",
-    "test:e2e": "node --test dist/tests/e2e/*.test.js",
-    "prepare": "npm run build"
+    "prepublishOnly": "npm run test"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
   },
   "keywords": [
     "supabase",
     "postgres",
+    "postgresql",
     "rls",
     "multi-tenancy",
+    "multitenancy",
+    "tenant",
     "rbac",
-    "row-level-security"
+    "row-level-security",
+    "authorization"
   ]
 }
