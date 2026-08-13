@@ -1,0 +1,61 @@
+{
+  "name": "supabase-tenant-rbac",
+  "version": "0.2.0",
+  "description": "SQL-first multi-tenancy, DBA-managed RBAC, RLS helpers and typed Supabase SDK.",
+  "license": "MIT",
+  "author": "supabase-tenant-rbac contributors",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./sdk": {
+      "types": "./dist/src/sdk/client.d.ts",
+      "import": "./dist/src/sdk/client.js"
+    },
+    "./invitation": {
+      "types": "./dist/src/invitation/adapter.d.ts",
+      "import": "./dist/src/invitation/adapter.js"
+    }
+  },
+  "files": [
+    "dist",
+    "sql",
+    "tests",
+    "examples",
+    "ARCHITECTURE.md",
+    "SECURITY.md",
+    "THREAT_MODEL.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.7.0"
+  },
+  "scripts": {
+    "build:sql": "node scripts/build-install.mjs",
+    "build": "npm run build:sql && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test dist/tests/unit/*.test.js",
+    "test:e2e": "node --test dist/tests/e2e/*.test.js",
+    "prepare": "npm run build"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "supabase",
+    "postgres",
+    "rls",
+    "multi-tenancy",
+    "rbac",
+    "row-level-security"
+  ]
+}
