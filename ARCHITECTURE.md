@@ -42,7 +42,15 @@ Scoped tables receive a composite foreign key `(tenant_id, scope_id) -> multiten
 
 ## Administrative model
 
-Roles and role permissions are defined only by the database owner through reviewed migrations. They have no public mutation RPC. Tenant owners may manage ownership and assign the existing role profiles; package permissions may delegate member, invitation, scope, and audit operations. Grant and invitation commands enforce anti-escalation using both the permission key and required `access_level` at the exact target scope.
+Roles and role permissions are defined only by the database owner through reviewed DBA migrations (`sql/templates/roles.sql`). They have no public mutation RPC.
+
+Tenant owners and delegated managers (`multitenancy.members.manage`) manage team memberships and assign existing role profiles to users via `mt.members.setGrants` or `mt.invitations.create`. 
+
+### Anti-Escalation Protection
+When a delegated manager attempts to assign a role or create an invitation with grants, the database executes an anti-escalation verification:
+- For every permission in the target role, the database verifies that the actor currently holds `has_access()` with an equal or stronger `access_level` at that exact `scope_id`.
+- If the actor attempts to grant a permission or scope they do not personally hold, PostgreSQL raises exception `ROLE_ESCALATION (42501)`.
+- This ensures that delegated project managers cannot grant cross-project access or elevate members to root managers.
 
 ## Invitations
 

@@ -208,6 +208,62 @@ using (
 
 ---
 
+## 👥 Role Assignment & Member Management
+
+A common question is: **Can a Tenant Admin assign roles to members?**
+
+**Yes!** Managing members and assigning roles is a core feature of the package, designed with strict enterprise security boundaries.
+
+### 1. Responsibility Model: DBA vs Tenant Admin
+
+| Action | Who Can Do It? | How is it done? |
+| :--- | :--- | :--- |
+| **Define Roles & Permissions** *(e.g. create 'Editor' role)* | **DBA Only** | SQL Migrations (`sql/templates/roles.sql`) |
+| **Assign Roles to Members** *(e.g. make Alice an 'Editor')* | **Tenant Owner & Admins** | TypeScript / Python SDK & UI (`setGrants`) |
+| **Invite New Members with Roles** | **Tenant Owner & Admins** | SDK (`invitations.create`) |
+| **Suspend / Reactivate / Remove Members** | **Tenant Owner & Admins** | SDK (`members.suspend`, `members.remove`) |
+
+> **Why are Roles DBA-Managed?**  
+> If tenant admins could create arbitrary roles, a compromised tenant account or UI vulnerability could create a "Super-Admin" role with full database bypass. In `supabase-multitenancy`, the DBA defines the fixed role catalog, and tenant admins safely assign users to those roles.
+
+---
+
+### 2. How to Assign Roles
+
+#### A. Assign Roles Upon Invitation
+```ts
+// Invite Alice as 'editor' in Project Alpha, and 'viewer' across the entire tenant
+const invite = await mt.invitations.create(tenantId, {
+  email: "alice@acme.com",
+  grants: [
+    { role_id: editorRoleId, scope_id: projectAlphaId }, // Project-scoped
+    { role_id: viewerRoleId, scope_id: null }           // Tenant-wide
+  ]
+});
+```
+
+#### B. Change Roles for an Existing Member
+```ts
+// Update Bob's role assignments
+await mt.members.setGrants(tenantId, membershipId, [
+  { role_id: managerRoleId, scope_id: projectAlphaId }
+]);
+```
+
+---
+
+### 3. Delegated Admins & Anti-Escalation (`ROLE_ESCALATION` Protection)
+
+You can delegate member management to non-owners by granting them a role with the `multitenancy.members.manage` permission.
+
+To prevent privilege escalation attacks, the database automatically enforces **Anti-Escalation**:
+> **A delegated admin CANNOT grant any role, permission, or scope that they do not personally possess.**
+
+* **Allowed**: A Marketing Manager with `documents.write` in *Project Marketing* can assign the `editor` role to a new marketer in *Project Marketing*.
+* **Blocked (`ROLE_ESCALATION: 42501`)**: If the Marketing Manager tries to grant someone access to *Project Finance* or assign a global `manager` role, the database automatically rejects the transaction.
+
+---
+
 ## 💻 TypeScript SDK Workflow
 
 ```ts
