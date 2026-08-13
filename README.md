@@ -1,6 +1,5 @@
 # supabase-multitenancy
 
-[![npm version](https://img.shields.io/npm/v/supabase-multitenancy.svg)](https://www.npmjs.com/package/supabase-multitenancy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![AI Agent Guide](https://img.shields.io/badge/AI%20Agent-Design%20Guide-purple.svg)](AGENT_GUIDE.md)
 
@@ -29,12 +28,14 @@ supabase db push
 
 ### 2. Client SDKs
 
-```bash
-# TypeScript / JavaScript
-npm install supabase-multitenancy @supabase/supabase-js
+Install directly from GitHub or vendor into your project:
 
-# Python
-pip install supabase-multitenancy
+```bash
+# TypeScript / JavaScript (via GitHub)
+npm install github:AlexanderCherkasov/supabase-multitenancy @supabase/supabase-js
+
+# Python (via GitHub)
+pip install "git+https://github.com/AlexanderCherkasov/supabase-multitenancy.git#subdirectory=python"
 ```
 
 ---
