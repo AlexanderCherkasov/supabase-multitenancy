@@ -1,0 +1,17 @@
+# supabase-multitenancy
+
+> SQL-first multi-tenancy and RBAC foundation for Supabase. Zero public schema pollution, DBA-managed role profiles, `own` vs `all` RLS authorization, hierarchical scopes, invitations, and typed SDKs.
+
+## Documentation for AI Agents & Developers
+
+- [Agent Implementation Guide](AGENT_GUIDE.md): Step-by-step instructions, RLS policy templates, schema patterns, and anti-patterns for AI assistants.
+- [README](README.md): Quickstart, installation, practical examples, and SDK workflows.
+- [Architecture](ARCHITECTURE.md): Database boundary, security model, authorization resolution, and anti-escalation guarantees.
+- [Security & Threat Model](SECURITY.md): Threat vectors, isolation invariants, and audit logging specifications.
+
+## Key Concepts
+
+- **Schema Isolation**: All package routines and tables reside strictly inside the `multitenancy` schema.
+- **Access Levels**: Permissions are resolved to `none`, `own`, or `all`. The meaning of `own` is defined in application RLS policies.
+- **Anti-Escalation**: Delegated admins cannot assign roles with permissions higher than they hold.
+- **SQL Templates**: Located in `sql/templates/` for permissions, roles, table protection, and global settings.

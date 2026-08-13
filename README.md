@@ -2,8 +2,11 @@
 
 [![npm version](https://img.shields.io/npm/v/supabase-multitenancy.svg)](https://www.npmjs.com/package/supabase-multitenancy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![AI Agent Guide](https://img.shields.io/badge/AI%20Agent-Design%20Guide-purple.svg)](AGENT_GUIDE.md)
 
 A SQL-first multi-tenancy and RBAC foundation for **Supabase**. The database is the source of truth: tenant namespaces, hierarchical scopes, memberships, DBA-managed role profiles, `own|all` RLS authorization, invitations, audit logging, and six versioned RPCs.
+
+> 🤖 **Building with AI Agents?** See [`AGENT_GUIDE.md`](AGENT_GUIDE.md) for deterministic prompt rules, schema patterns, and canonical RLS templates for LLM assistants (Antigravity, Cursor, Claude Code, Copilot).
 
 - **Zero Public Schema Pollution**: All tables, functions, and triggers reside in the dedicated `multitenancy` schema.
 - **SQL-First & Safe**: Roles and permissions are DBA-managed migration data. Tenant admins cannot elevate privileges.

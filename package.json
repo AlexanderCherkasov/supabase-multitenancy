@@ -25,6 +25,8 @@
     "dist/src",
     "sql",
     "examples",
+    "AGENT_GUIDE.md",
+    "llms.txt",
     "ARCHITECTURE.md",
     "SECURITY.md",
     "THREAT_MODEL.md",
