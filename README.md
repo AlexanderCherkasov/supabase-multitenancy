@@ -1,96 +1,274 @@
 # supabase-multitenancy
 
-A SQL-first multi-tenancy and RBAC foundation for Supabase. The database is the product: tenant namespaces, typed scopes, memberships, DBA-managed role profiles, `own|all` RLS authorization, invitations, audit events, and six versioned RPCs.
+[![npm version](https://img.shields.io/npm/v/supabase-multitenancy.svg)](https://www.npmjs.com/package/supabase-multitenancy)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-There is no package-specific CLI and no runtime JSON configuration. Consumer projects install reviewed SQL through their normal Supabase migration workflow. TypeScript and Python SDKs are optional, user-session wrappers over the public RPCs.
+A SQL-first multi-tenancy and RBAC foundation for **Supabase**. The database is the source of truth: tenant namespaces, hierarchical scopes, memberships, DBA-managed role profiles, `own|all` RLS authorization, invitations, audit logging, and six versioned RPCs.
 
-## Install the database package
+- **Zero Public Schema Pollution**: All tables, functions, and triggers reside in the dedicated `multitenancy` schema.
+- **SQL-First & Safe**: Roles and permissions are DBA-managed migration data. Tenant admins cannot elevate privileges.
+- **`own` vs `all` Access Contract**: Express fine-grained authorization (read own rows vs read all tenant rows) with single-line SQL predicates.
+- **Full SDK Support**: Typed TypeScript and Python SDKs for user-session operations and UI permission checks (`can()`).
 
-Create a normal consumer migration with the Supabase CLI, then copy the contents of `sql/install.sql` into it:
+---
+
+## 📦 Quick Installation
+
+### 1. Database Package (SQL Migration)
+
+Create a new Supabase migration and paste the contents of [`sql/install.sql`](file:///Users/alexander/dev/supabase-tenant-rbac/sql/install.sql):
 
 ```bash
 supabase migration new install_multitenancy
+# Copy sql/install.sql into supabase/migrations/<timestamp>_install_multitenancy.sql
+supabase db push
 ```
 
-For development from this repository, `npm run build:sql` regenerates `sql/install.sql` from the ordered files in `sql/migrations`. The `multitenancy` schema encapsulates all package tables, triggers, helper functions, and RPC entrypoints.
-
-After the core migration, add reviewed consumer migrations based on:
-
-- `sql/templates/settings.sql`
-- `sql/templates/permissions.sql`
-- `sql/templates/roles.sql`
-- `sql/templates/protect_table.sql`
-
-Permissions and role profiles are DBA-owned migration data. `anon`, `authenticated`, and `service_role` have no table privileges on `multitenancy.roles` or `multitenancy.role_permissions`. Tenant owners may assign existing roles but cannot create or edit them.
-
-## Access model
-
-Each role permission has one level:
-
-- `own`: the application policy must also match `auth.uid()` or an application-owned row predicate.
-- `all`: every row in the covered tenant/scope is allowed.
-
-`multitenancy.access_level()` returns `none`, `own`, or `all` from live database state. `multitenancy.has_access()` compares the result with a required level. For multiple scopes, every scope must be covered and the weakest covered level wins.
-
-Custom row predicates belong directly in consumer RLS migrations. Keep them `SECURITY INVOKER`; never store a function name in tenant-controlled data.
-
-## TypeScript SDK
+### 2. Client SDKs
 
 ```bash
+# TypeScript / JavaScript
 npm install supabase-multitenancy @supabase/supabase-js
+
+# Python
+pip install supabase-multitenancy
 ```
+
+---
+
+## 🛠️ Step-by-Step Practical Guide
+
+### Step 1: Declare Permissions (DBA Migration)
+
+Permissions are global capabilities defined by database migrations.
+
+```sql
+insert into multitenancy.permissions (key, description) values
+  ('documents.read',   'Read documents in tenant or scope'),
+  ('documents.create', 'Create new documents'),
+  ('documents.update', 'Edit documents'),
+  ('documents.delete', 'Delete documents')
+on conflict (key) do update set description = excluded.description;
+```
+
+---
+
+### Step 2: Define Roles with `own` vs `all` Access Levels
+
+Roles map permissions to access levels:
+- **`own`**: User can only access rows they authored (`author_id = auth.uid()`).
+- **`all`**: User can access all rows across the tenant or assigned scope.
+
+```sql
+do $$
+declare
+  v_viewer uuid;
+  v_editor uuid;
+  v_manager uuid;
+begin
+  -- 1. Viewer: Can view only their own documents
+  insert into multitenancy.roles (tenant_id, key, name, description)
+  values (null, 'viewer', 'Viewer', 'Read own documents')
+  returning id into v_viewer;
+
+  insert into multitenancy.role_permissions (role_id, permission_id, access_level)
+  select v_viewer, id, 'own'
+  from multitenancy.permissions where key = 'documents.read';
+
+  -- 2. Editor: Can read and edit their own documents
+  insert into multitenancy.roles (tenant_id, key, name, description)
+  values (null, 'editor', 'Editor', 'Create and edit own documents')
+  returning id into v_editor;
+
+  insert into multitenancy.role_permissions (role_id, permission_id, access_level)
+  select v_editor, id, 'own'
+  from multitenancy.permissions where key in ('documents.read', 'documents.create', 'documents.update');
+
+  -- 3. Manager: Can read, edit, and delete ALL documents in the tenant or scope
+  insert into multitenancy.roles (tenant_id, key, name, description)
+  values (null, 'manager', 'Manager', 'Manage all documents and delete')
+  returning id into v_manager;
+
+  insert into multitenancy.role_permissions (role_id, permission_id, access_level)
+  select v_manager, id, 'all'
+  from multitenancy.permissions where key in ('documents.read', 'documents.create', 'documents.update', 'documents.delete');
+end $$;
+```
+
+---
+
+### Step 3: Create Application Table & Attach RLS
+
+Create your business table with `tenant_id`, optional `project_id` (scope), and `author_id`.
+
+```sql
+create table public.documents (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references multitenancy.tenants(id) on delete cascade,
+  project_id uuid null,
+  author_id uuid not null default auth.uid() references auth.users(id),
+  title text not null,
+  content text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint fk_documents_scope foreign key (tenant_id, project_id)
+    references multitenancy.scopes(tenant_id, id)
+    on delete restrict
+);
+
+-- Protect tenant_id and project_id from being altered on update
+create trigger trg_documents_protect
+  before update on public.documents
+  for each row execute function multitenancy.enforce_protected_keys_immutable('project_id');
+
+-- Enable RLS
+alter table public.documents enable row level security;
+```
+
+---
+
+### Step 4: Write Clean RLS Policies
+
+#### 📖 Scenario A: User reads ONLY THEIR OWN rows vs Managers read ALL rows
+```sql
+create policy "documents_select" on public.documents
+for select to authenticated
+using (
+  case multitenancy.access_level(tenant_id, 'documents.read', array[project_id])
+    when 'all' then true
+    when 'own' then author_id = auth.uid()
+    else false
+  end
+);
+```
+
+#### ✏️ Scenario B: User updates ONLY THEIR OWN rows vs Managers update ALL rows
+```sql
+create policy "documents_update" on public.documents
+for update to authenticated
+using (
+  case multitenancy.access_level(tenant_id, 'documents.update', array[project_id])
+    when 'all' then true
+    when 'own' then author_id = auth.uid()
+    else false
+  end
+)
+with check (
+  case multitenancy.access_level(tenant_id, 'documents.update', array[project_id])
+    when 'all' then true
+    when 'own' then author_id = auth.uid()
+    else false
+  end
+);
+```
+
+#### 🗑️ Scenario C: ONLY Managers & Owners can DELETE (access_level = 'all')
+```sql
+create policy "documents_delete" on public.documents
+for delete to authenticated
+using (
+  multitenancy.has_access(tenant_id, 'documents.delete', array[project_id], 'all')
+);
+```
+
+---
+
+## 💻 TypeScript SDK Workflow
 
 ```ts
 import { createClient } from "@supabase/supabase-js";
 import { createMultitenancyClient } from "supabase-multitenancy";
 
-const supabase = createClient(url, publishableKey);
-const mt = createMultitenancyClient<"documents.read" | "documents.update">(supabase);
+// 1. Initialize Supabase and Multitenancy client
+const supabase = createClient("https://xyz.supabase.co", "anon-key");
+const mt = createMultitenancyClient(supabase);
 
-const tenant = await mt.createTenant({ slug: "acme", name: "Acme" });
-const roles = await mt.roles.list(tenant.tenant_id); // read-only catalog
-const allowed = await mt.can(tenant.tenant_id, "documents.read");
+// 2. Create a Tenant Organization
+const { tenant_id } = await mt.createTenant({
+  slug: "acme-corp",
+  name: "Acme Corporation",
+});
+
+// 3. Create a Project Scope
+const { scope_id: projectAlphaId } = await mt.scopes.create(tenant_id, {
+  kind: "project",
+  key: "alpha",
+  name: "Project Alpha",
+});
+
+// 4. Invite a Member as 'editor' inside Project Alpha
+const roles = await mt.roles.list(tenant_id);
+const editorRole = roles.find((r) => r.key === "editor")!;
+
+const invite = await mt.invitations.create(tenant_id, {
+  email: "developer@acme.com",
+  grants: [
+    {
+      role_id: editorRole.id,
+      scope_id: projectAlphaId, // Scoped grant
+    },
+  ],
+});
+
+// 5. UI Authorization Check (e.g. Can render the Delete button?)
+const canDelete = await mt.can(tenant_id, "documents.delete", [projectAlphaId]);
+if (canDelete) {
+  renderDeleteButton();
+}
+
+// 6. Query data via standard Supabase PostgREST (RLS enforced automatically!)
+const { data: docs } = await supabase
+  .from("documents")
+  .select("*")
+  .eq("tenant_id", tenant_id);
 ```
 
-The SDK includes typed tenant, permission, role, scope, member, invitation, audit, authorization, and generic admin APIs. It deliberately exposes no role mutation method.
+---
 
-## Python SDK
-
-```bash
-pip install ./python
-```
+## 🐍 Python SDK Workflow
 
 ```python
 from supabase import create_client
 from supabase_multitenancy import MultitenancyClient
 
-supabase = create_client(url, publishable_key)
+supabase = create_client("https://xyz.supabase.co", "anon-key")
 mt = MultitenancyClient(supabase)
 
-tenant = mt.create_tenant(slug="acme", name="Acme")
-roles = mt.roles.list(tenant["tenant_id"])
-allowed = mt.can(tenant["tenant_id"], "documents.read")
+# 1. Create Tenant
+tenant = mt.create_tenant(slug="acme-corp", name="Acme Corporation")
+tenant_id = tenant["tenant_id"]
+
+# 2. Check UI Permission
+allowed = mt.can(tenant_id, "documents.read")
+print(f"Can read documents: {allowed}")
+
+# 3. Fetch Dashboard Context
+context = mt.context(tenant_id, section="self")
+print("User context:", context)
 ```
 
-Both SDKs require a Supabase client carrying the current user's session. Never put a service-role or secret key in a browser, mobile application, or other untrusted client.
+---
 
-## Package RPC surface (`multitenancy` schema)
+## 🎯 Architecture & Security Guarantees
 
-- `multitenancy.create_tenant(slug, name)`
-- `multitenancy.can(tenant_id, permission, scope_ids)`
-- `multitenancy.context(tenant_id, section, cursor, limit)`
-- `multitenancy.invitation_preview(token)`
-- `multitenancy.accept_invitation(token)`
-- `multitenancy.admin(tenant_id, command, payload)`
+| Security Feature | Implementation |
+| :--- | :--- |
+| **Schema Isolation** | All functions, tables, and routines live strictly in schema `multitenancy`. `public` remains completely clean. |
+| **DBA-Managed Roles** | Roles and permissions can only be altered by database migrations. Tenant admins cannot elevate roles (`ROLE_ESCALATION` guard). |
+| **Append-Only Audit Log** | Audit table triggers prohibit `UPDATE` and `DELETE` even for administrators (`TRUNCATE` revoked). |
+| **One-Time Token Hashing** | Invitations store only SHA-256 hashes of cryptographically random 256-bit entropy tokens. |
+| **Key Immutability** | Foreign keys (`tenant_id`, `scope_id`) are immutable after insertion via `enforce_protected_keys_immutable()`. |
 
-All RPCs reside in the `multitenancy` schema, return `{ "api_version": 1, "data": ... }`, and are called through the SDK's schema-scoped client.
+---
 
-## Verification
+## 📚 Examples Directory
 
-```bash
-npm run typecheck
-npm test
-PYTHONPATH=python/src python3 -m unittest discover -s python/tests -v
-```
+Explore fully runnable examples in [`examples/`](file:///Users/alexander/dev/supabase-tenant-rbac/examples):
+- [`examples/1-saas-starter-documents`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/1-saas-starter-documents): Multi-tenant documents app with `viewer`, `editor`, and `manager` roles.
 
-Run `tests/pgtap` against a disposable local Supabase database before release. See [ARCHITECTURE.md](./ARCHITECTURE.md), [SECURITY.md](./SECURITY.md), and [THREAT_MODEL.md](./THREAT_MODEL.md).
+---
+
+## 📄 License
+
+MIT © [Alexander Cherkasov](https://github.com/AlexanderCherkasov) & contributors.
