@@ -353,16 +353,44 @@ print("User context:", context)
 | **One-Time Token Hashing** | Invitations store only SHA-256 hashes of cryptographically random 256-bit entropy tokens. |
 | **Key Immutability** | Foreign keys (`tenant_id`, `scope_id`) are immutable after insertion via `enforce_protected_keys_immutable()`. |
 
----
-
 ## 📚 Examples Directory
- 
+
 Explore fully runnable examples in [`examples/`](file:///Users/alexander/dev/supabase-tenant-rbac/examples):
 - [`examples/1-saas-starter-documents`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/1-saas-starter-documents): Multi-tenant documents app with `viewer`, `editor`, and `manager` roles.
 - [`examples/2-collaborators-and-custom-predicates`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/2-collaborators-and-custom-predicates): Document sharing & collaborators list via custom `SECURITY INVOKER` predicates.
 
 ---
 
+## 🤖 AI Agent Skills & Agentic Development
+
+This repository includes first-class support for **AI Coding Assistants** (Antigravity, Cursor, Claude Code, GitHub Copilot, Codex).
+
+### Included Agent Assets
+
+| Resource | Purpose | Path |
+| :--- | :--- | :--- |
+| **Agent Skill** | Pre-configured skill definition with triggers, guardrails, and templates | [`.skills/supabase-multitenancy/SKILL.md`](file:///Users/alexander/dev/supabase-tenant-rbac/.skills/supabase-multitenancy/SKILL.md) |
+| **Agent Skill (Mirror)** | Standard `.agents` mirror for agent compatibility | [`.agents/skills/supabase-multitenancy/SKILL.md`](file:///Users/alexander/dev/supabase-tenant-rbac/.agents/skills/supabase-multitenancy/SKILL.md) |
+| **Implementation Guide** | Full design document with canonical RLS patterns and anti-pattern checklists | [`AGENT_GUIDE.md`](file:///Users/alexander/dev/supabase-tenant-rbac/AGENT_GUIDE.md) |
+| **LLM Discovery** | Standard LLM summary file for fast context ingestion | [`llms.txt`](file:///Users/alexander/dev/supabase-tenant-rbac/llms.txt) |
+| **Agent Rules** | Workspace-level rules for AI coding assistants | [`AGENTS.md`](file:///Users/alexander/dev/supabase-tenant-rbac/AGENTS.md) |
+
+### How to Use with AI Agents
+
+When building features with an AI assistant in a project that uses `supabase-multitenancy`, prompt your agent:
+
+```markdown
+You are building a multi-tenant feature on Supabase.
+Follow the guidelines and RLS patterns in `.skills/supabase-multitenancy/SKILL.md` and `AGENT_GUIDE.md`:
+1. Use the `multitenancy` schema (do not create functions in `public`).
+2. Define permissions and roles with `'own'` vs `'all'` access levels.
+3. Protect business tables with `multitenancy.enforce_protected_keys_immutable()`.
+4. Generate RLS policies using `multitenancy.access_level()` and `multitenancy.has_access()`.
+```
+
+---
+
 ## 📄 License
 
 MIT © [Alexander Cherkasov](https://github.com/AlexanderCherkasov) & contributors.
+
