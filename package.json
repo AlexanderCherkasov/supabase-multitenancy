@@ -1,9 +1,9 @@
 {
-  "name": "supabase-tenant-rbac",
+  "name": "supabase-multitenancy",
   "version": "0.2.0",
-  "description": "SQL-first multi-tenancy, DBA-managed RBAC, RLS helpers and typed Supabase SDK.",
+  "description": "A SQL-first multi-tenancy and RBAC foundation for Supabase",
   "license": "MIT",
-  "author": "supabase-tenant-rbac contributors",
+  "author": "supabase-multitenancy contributors",
   "type": "module",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",

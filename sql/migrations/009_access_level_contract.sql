@@ -1,5 +1,5 @@
 -- 009_access_level_contract.sql
--- supabase-tenant-rbac v0.2.0 — Finalize the safe row-access contract
+-- supabase-multitenancy v0.2.0 — Finalize the safe row-access contract
 --
 -- Role data may select only `own` or `all`. Row ownership columns and custom
 -- predicates belong to application migrations and generated RLS policies.

@@ -1,5 +1,5 @@
 -- 006_authorize.sql
--- supabase-tenant-rbac v0.2.0 — Authorization helpers and internal RLS lockdown
+-- supabase-multitenancy v0.2.0 — Authorization helpers and internal RLS lockdown
 -- Purpose: Resolve a user's effective permission level without inspecting app rows.
 -- Dependencies: 002_identities, 003_rbac, 004_invitations, 005_audit
 

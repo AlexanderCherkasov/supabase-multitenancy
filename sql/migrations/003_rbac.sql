@@ -1,5 +1,5 @@
 -- 003_rbac.sql
--- supabase-tenant-rbac v0.2.0 — RBAC: permissions, roles, access levels, assignments
+-- supabase-multitenancy v0.2.0 — RBAC: permissions, roles, access levels, assignments
 -- Purpose: Global permission catalog + DBA-managed tenant role profiles with scoped assignments.
 -- Dependencies: 002_identities
 

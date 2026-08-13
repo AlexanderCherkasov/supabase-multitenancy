@@ -1,9 +1,9 @@
 -- Generated release artifact. Do not edit; edit sql/migrations instead.
--- supabase-tenant-rbac v0.2.0
+-- supabase-multitenancy v0.2.0
 
 -- BEGIN 001_base.sql
 -- 001_base.sql
--- supabase-tenant-rbac v0.2.0 — Base: extensions, schema, helpers, version
+-- supabase-multitenancy v0.2.0 — Base: extensions, schema, helpers, version
 -- Purpose: Create private schema and shared utilities. No business tables.
 -- Apply first. Idempotent.
 
@@ -45,7 +45,7 @@ insert into multitenancy.settings (id) values (1) on conflict (id) do nothing;
 
 -- BEGIN 002_identities.sql
 -- 002_identities.sql
--- supabase-tenant-rbac v0.2.0 — Identities: profiles, tenants, scopes, memberships
+-- supabase-multitenancy v0.2.0 — Identities: profiles, tenants, scopes, memberships
 -- Purpose: Tenant and membership roots. auth.users is the sole identity source.
 -- Dependencies: 001_base
 
@@ -145,7 +145,7 @@ create trigger trg_memberships_touch before update on multitenancy.memberships
 
 -- BEGIN 003_rbac.sql
 -- 003_rbac.sql
--- supabase-tenant-rbac v0.2.0 — RBAC: permissions, roles, access levels, assignments
+-- supabase-multitenancy v0.2.0 — RBAC: permissions, roles, access levels, assignments
 -- Purpose: Global permission catalog + DBA-managed tenant role profiles with scoped assignments.
 -- Dependencies: 002_identities
 
@@ -254,7 +254,7 @@ create trigger trg_assignments_scope_check
 
 -- BEGIN 004_invitations.sql
 -- 004_invitations.sql
--- supabase-tenant-rbac v0.2.0 — Invitations with one-time tokens
+-- supabase-multitenancy v0.2.0 — Invitations with one-time tokens
 -- Purpose: Full lifecycle — expiry, revoke, resend, email-match, atomic accept.
 -- Security: 256-bit entropy, URL-safe base64url, SHA-256 hash only, raw token once.
 -- Dependencies: 003_rbac
@@ -299,7 +299,7 @@ create index if not exists idx_invitation_grants_invitation on multitenancy.invi
 
 -- BEGIN 005_audit.sql
 -- 005_audit.sql
--- supabase-tenant-rbac v0.2.0 — Audit log (append-only)
+-- supabase-multitenancy v0.2.0 — Audit log (append-only)
 -- Purpose: Administrative command history. Never stores raw invitation tokens.
 -- Dependencies: 002_identities
 
@@ -330,7 +330,7 @@ create trigger trg_audit_no_update
 
 -- BEGIN 006_authorize.sql
 -- 006_authorize.sql
--- supabase-tenant-rbac v0.2.0 — Authorization helpers and internal RLS lockdown
+-- supabase-multitenancy v0.2.0 — Authorization helpers and internal RLS lockdown
 -- Purpose: Resolve a user's effective permission level without inspecting app rows.
 -- Dependencies: 002_identities, 003_rbac, 004_invitations, 005_audit
 
@@ -512,7 +512,7 @@ comment on function multitenancy.access_level(uuid,text,uuid[]) is
 
 -- BEGIN 007_rpc_core.sql
 -- 007_rpc_core.sql
--- supabase-tenant-rbac v0.2.0 — Schema RPCs: create_tenant, can, context, preview, accept
+-- supabase-multitenancy v0.2.0 — Schema RPCs: create_tenant, can, context, preview, accept
 -- All RPCs reside in `multitenancy` schema, return { api_version: 1, data: ... }, and are SECURITY DEFINER.
 -- Dependencies: 006_authorize
 
@@ -685,7 +685,7 @@ update multitenancy.package_meta set version='0.2.0', installed_at=now() where i
 
 -- BEGIN 008_rpc_admin.sql
 -- 008_rpc_admin.sql
--- supabase-tenant-rbac v0.2.0 — Schema RPC: admin (discriminated commands)
+-- supabase-multitenancy v0.2.0 — Schema RPC: admin (discriminated commands)
 -- Single entry point for all tenant admin operations in `multitenancy` schema. Owner-only by default,
 -- delegated managers checked via `authorize` and ROLE_ESCALATION guard.
 -- Dependencies: 007_rpc_core (authorize must exist)
@@ -871,7 +871,7 @@ update multitenancy.package_meta set version='0.2.0', installed_at=now() where i
 
 -- BEGIN 009_access_level_contract.sql
 -- 009_access_level_contract.sql
--- supabase-tenant-rbac v0.2.0 — Finalize the safe row-access contract
+-- supabase-multitenancy v0.2.0 — Finalize the safe row-access contract
 --
 -- Role data may select only `own` or `all`. Row ownership columns and custom
 -- predicates belong to application migrations and generated RLS policies.

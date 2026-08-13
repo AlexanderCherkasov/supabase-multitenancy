@@ -1,5 +1,5 @@
 -- 004_invitations.sql
--- supabase-tenant-rbac v0.2.0 — Invitations with one-time tokens
+-- supabase-multitenancy v0.2.0 — Invitations with one-time tokens
 -- Purpose: Full lifecycle — expiry, revoke, resend, email-match, atomic accept.
 -- Security: 256-bit entropy, URL-safe base64url, SHA-256 hash only, raw token once.
 -- Dependencies: 003_rbac

@@ -1,6 +1,6 @@
 # supabase-multitenancy
 
-Python client for the SQL-first `supabase-tenant-rbac` package.
+Python client for the SQL-first `supabase-multitenancy` package.
 
 ```python
 from supabase import create_client

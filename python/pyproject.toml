@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "supabase-multitenancy"
 version = "0.2.0"
-description = "Typed Python client for the supabase-tenant-rbac SQL package"
+description = "Typed Python client for the supabase-multitenancy SQL package"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "supabase-tenant-rbac contributors" }]
+authors = [{ name = "supabase-multitenancy contributors" }]
 dependencies = ["supabase>=2.18.1,<3"]
 keywords = ["supabase", "postgres", "multitenancy", "rbac", "rls"]
 

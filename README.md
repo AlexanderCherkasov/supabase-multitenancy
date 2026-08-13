@@ -1,4 +1,4 @@
-# supabase-tenant-rbac
+# supabase-multitenancy
 
 A SQL-first multi-tenancy and RBAC foundation for Supabase. The database is the product: tenant namespaces, typed scopes, memberships, DBA-managed role profiles, `own|all` RLS authorization, invitations, audit events, and six versioned RPCs.
 
@@ -37,12 +37,12 @@ Custom row predicates belong directly in consumer RLS migrations. Keep them `SEC
 ## TypeScript SDK
 
 ```bash
-npm install supabase-tenant-rbac @supabase/supabase-js
+npm install supabase-multitenancy @supabase/supabase-js
 ```
 
 ```ts
 import { createClient } from "@supabase/supabase-js";
-import { createMultitenancyClient } from "supabase-tenant-rbac";
+import { createMultitenancyClient } from "supabase-multitenancy";
 
 const supabase = createClient(url, publishableKey);
 const mt = createMultitenancyClient<"documents.read" | "documents.update">(supabase);

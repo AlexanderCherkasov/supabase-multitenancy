@@ -1,5 +1,5 @@
 -- 001_base.sql
--- supabase-tenant-rbac v0.2.0 — Base: extensions, schema, helpers, version
+-- supabase-multitenancy v0.2.0 — Base: extensions, schema, helpers, version
 -- Purpose: Create private schema and shared utilities. No business tables.
 -- Apply first. Idempotent.
 

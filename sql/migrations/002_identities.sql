@@ -1,5 +1,5 @@
 -- 002_identities.sql
--- supabase-tenant-rbac v0.2.0 — Identities: profiles, tenants, scopes, memberships
+-- supabase-multitenancy v0.2.0 — Identities: profiles, tenants, scopes, memberships
 -- Purpose: Tenant and membership roots. auth.users is the sole identity source.
 -- Dependencies: 001_base
 

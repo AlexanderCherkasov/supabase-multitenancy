@@ -1,5 +1,5 @@
 -- 007_rpc_core.sql
--- supabase-tenant-rbac v0.2.0 — Schema RPCs: create_tenant, can, context, preview, accept
+-- supabase-multitenancy v0.2.0 — Schema RPCs: create_tenant, can, context, preview, accept
 -- All RPCs reside in `multitenancy` schema, return { api_version: 1, data: ... }, and are SECURITY DEFINER.
 -- Dependencies: 006_authorize
 

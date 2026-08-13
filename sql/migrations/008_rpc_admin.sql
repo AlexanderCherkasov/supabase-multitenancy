@@ -1,5 +1,5 @@
 -- 008_rpc_admin.sql
--- supabase-tenant-rbac v0.2.0 — Schema RPC: admin (discriminated commands)
+-- supabase-multitenancy v0.2.0 — Schema RPC: admin (discriminated commands)
 -- Single entry point for all tenant admin operations in `multitenancy` schema. Owner-only by default,
 -- delegated managers checked via `authorize` and ROLE_ESCALATION guard.
 -- Dependencies: 007_rpc_core (authorize must exist)

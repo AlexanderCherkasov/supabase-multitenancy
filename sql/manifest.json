@@ -1,51 +1,51 @@
 {
-  "package": "supabase-tenant-rbac",
+  "package": "supabase-multitenancy",
   "version": "0.2.0",
   "migrations": [
     {
       "version": "0.2.0",
       "file": "migrations/001_base.sql",
-      "checksum": "a678bec60c9b0f196cadccc15a0a9a423bdd5a0e02ecd37ce1d68c8e4974f63d"
+      "checksum": "6aab69d96ada2225d31fcda141ff1d7e71bde3bbf8ebd0042b59950aa95f2e91"
     },
     {
       "version": "0.2.0",
       "file": "migrations/002_identities.sql",
-      "checksum": "3dc4337b9101d0efc9312da70896de9692857d7d6d765e1b4ee582066061645e"
+      "checksum": "79ebbe4a5f47897c7d1f8915f1efbde09768ad14aa35d4c3c151af038cd8eb90"
     },
     {
       "version": "0.2.0",
       "file": "migrations/003_rbac.sql",
-      "checksum": "bafa9807be35777f75a81bc887887b9359fa103aa86c0331c5c26424f48f21bf"
+      "checksum": "dbda9c8cffbe0179596f230c89ff2087ea2f572c8eeacb5cae75861a85103366"
     },
     {
       "version": "0.2.0",
       "file": "migrations/004_invitations.sql",
-      "checksum": "49c07587d16b692344c9fc41bfbb74015a38fe088a5f91bf643f8aec4b2a8198"
+      "checksum": "b72852c80677390df7f5354fe451163de795265bb51d4e682cf89cc4a1326fce"
     },
     {
       "version": "0.2.0",
       "file": "migrations/005_audit.sql",
-      "checksum": "4e2576d4dd0b42b2a8ebb32262ba588adcc8f0d737630508e35f6902fa754ed3"
+      "checksum": "e18bda45af278e16804d7cb4ceed445d5ef146f1508221113b39da376cc9c528"
     },
     {
       "version": "0.2.0",
       "file": "migrations/006_authorize.sql",
-      "checksum": "90f60885d68a7e1e038368e0069ec4f9b25e7c32664a0779d177f4cc840d5d36"
+      "checksum": "8b4c9fba1f3d3bc58d7e6275920ecea56c39a9f426ac6b22d354110c0bd00df7"
     },
     {
       "version": "0.2.0",
       "file": "migrations/007_rpc_core.sql",
-      "checksum": "51c12a1b886f4b2112e69390516faf15bd4910a06a8f9db802fbbf75562b0f31"
+      "checksum": "66683b58cf0a40a59be23c3ce08e320742e538201e7704a51242e759a60a4654"
     },
     {
       "version": "0.2.0",
       "file": "migrations/008_rpc_admin.sql",
-      "checksum": "ee0675a7a8df560db1573b0553d64110256b7da6160c20110ce7916ae0762868"
+      "checksum": "5c6d27fadfaf5b5c0a94c337daffed61c1e549e36316a4fdb6d0865ca9603a1d"
     },
     {
       "version": "0.2.0",
       "file": "migrations/009_access_level_contract.sql",
-      "checksum": "34ace34718dc83796ce239ed9f495badc4c18a856bbbf3a3addcc07fa1b38a81"
+      "checksum": "deb963a1a30b395f04da8a5e679623657a71a85db14939986a8a14bec1b6ba37"
     }
   ]
 }
