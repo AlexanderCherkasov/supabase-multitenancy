@@ -172,6 +172,40 @@ using (
 );
 ```
 
+#### 🤝 Scenario D: Custom Row Predicates & Document Collaborators (Sharing)
+When your application allows users to share specific documents with other tenant members via a `document_collaborators` table, compose the custom predicate inside the `own` branch:
+
+```sql
+-- 1. Create a SECURITY INVOKER helper function
+create or replace function public.is_document_collaborator(
+  p_document_id uuid,
+  p_user_id uuid,
+  p_required_level text default 'view'
+)
+returns boolean language sql stable security invoker as $$
+  select exists (
+    select 1 from public.document_collaborators
+    where document_id = p_document_id
+      and user_id = p_user_id
+      and (p_required_level = 'view' or permission_level = 'edit')
+  );
+$$;
+
+-- 2. Compose into RLS policy (Author OR Invited Collaborator)
+create policy "documents_select_with_sharing" on public.documents
+for select to authenticated
+using (
+  case multitenancy.access_level(tenant_id, 'documents.read', array[project_id])
+    when 'all' then true
+    when 'own' then (
+      author_id = auth.uid()
+      or public.is_document_collaborator(id, auth.uid(), 'view')
+    )
+    else false
+  end
+);
+```
+
 ---
 
 ## 💻 TypeScript SDK Workflow
@@ -263,9 +297,10 @@ print("User context:", context)
 ---
 
 ## 📚 Examples Directory
-
+ 
 Explore fully runnable examples in [`examples/`](file:///Users/alexander/dev/supabase-tenant-rbac/examples):
 - [`examples/1-saas-starter-documents`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/1-saas-starter-documents): Multi-tenant documents app with `viewer`, `editor`, and `manager` roles.
+- [`examples/2-collaborators-and-custom-predicates`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/2-collaborators-and-custom-predicates): Document sharing & collaborators list via custom `SECURITY INVOKER` predicates.
 
 ---
 
