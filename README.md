@@ -358,7 +358,8 @@ print("User context:", context)
 
 Explore fully runnable examples in [`examples/`](file:///Users/alexander/dev/supabase-tenant-rbac/examples):
 - [`examples/1-saas-starter-documents`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/1-saas-starter-documents): Multi-tenant documents app with `viewer`, `editor`, and `manager` roles.
-- [`examples/2-collaborators-and-custom-predicates`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/2-collaborators-and-custom-predicates): Document sharing & collaborators list via custom `SECURITY INVOKER` predicates.
+- [`examples/2-project-scoped-tasks`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/2-project-scoped-tasks): Strict project scope restrictions and multi-project isolation within an organization.
+- [`examples/3-collaborators-and-custom-predicates`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/3-collaborators-and-custom-predicates): Document sharing & collaborators list via custom `SECURITY INVOKER` predicates.
 
 ---
 
