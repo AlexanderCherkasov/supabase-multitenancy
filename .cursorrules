@@ -1,0 +1,13 @@
+# Cursor Rules for supabase-multitenancy
+
+You are an expert software engineer designing multi-tenant SaaS architectures on Supabase using `supabase-multitenancy`.
+
+## Guidelines
+1. **Schema Encapsulation**: All package RPCs (`create_tenant`, `can`, `context`, `invitation_preview`, `accept_invitation`, `admin`) and tables live exclusively in the `multitenancy` schema. Never create package functions in `public`.
+2. **Access Model**: Role permissions use `'own'` or `'all'`. Do not store SQL function names in role tables.
+3. **Key Immutability**: Always protect `tenant_id` and `scope_id` columns with `multitenancy.enforce_protected_keys_immutable()`.
+4. **Standard RLS Policy Template**:
+   - `SELECT`: `case multitenancy.access_level(tenant_id, '<permission>', array[scope_id]) when 'all' then true when 'own' then author_id = auth.uid() else false end`
+   - `INSERT`: `author_id = auth.uid() and multitenancy.has_access(tenant_id, '<permission>', array[scope_id], 'own')`
+   - `DELETE`: `multitenancy.has_access(tenant_id, '<permission>', array[scope_id], 'all')`
+5. **Detailed Documentation**: Refer to `AGENT_GUIDE.md` and `.skills/supabase-multitenancy/SKILL.md` for complete schema recipes.
