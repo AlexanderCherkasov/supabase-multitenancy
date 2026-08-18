@@ -40,7 +40,7 @@
     {
       "version": "0.2.0",
       "file": "migrations/008_rpc_admin.sql",
-      "checksum": "5c6d27fadfaf5b5c0a94c337daffed61c1e549e36316a4fdb6d0865ca9603a1d"
+      "checksum": "e6cb836cde18528e901444a36356a2ca17d187aacdfd36c06df4004c4158b18b"
     },
     {
       "version": "0.2.0",

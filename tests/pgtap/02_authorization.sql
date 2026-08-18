@@ -35,11 +35,11 @@ select ok(
   'has_access compares a required level'
 );
 select ok(
-  (select pg_get_functiondef(oid) ilike '%rp.access_level%' from pg_proc where proname='admin' and pronamespace='multitenancy'::regnamespace),
+  exists (select 1 from pg_proc where proname in ('admin', '_admin_member') and pronamespace='multitenancy'::regnamespace and pg_get_functiondef(oid) ilike '%rp.access_level%'),
   'admin escalation guard compares access levels'
 );
 select ok(
-  (select pg_get_functiondef(oid) ilike '%ROLE_ESCALATION%' from pg_proc where proname='admin' and pronamespace='multitenancy'::regnamespace),
+  exists (select 1 from pg_proc where proname in ('admin', '_admin_member', '_admin_invitation') and pronamespace='multitenancy'::regnamespace and pg_get_functiondef(oid) ilike '%ROLE_ESCALATION%'),
   'admin reports role escalation'
 );
 select ok(

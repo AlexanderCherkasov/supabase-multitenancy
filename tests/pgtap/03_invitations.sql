@@ -15,15 +15,15 @@ select has_index('multitenancy', 'invitations', 'uq_invitations_active_per_email
 
 -- expiry, revoke, resend via admin function
 select ok(
-  (select pg_get_functiondef(oid) ilike '%invitation.create%' from pg_proc where proname='admin' and pronamespace='multitenancy'::regnamespace limit 1),
+  exists (select 1 from pg_proc where proname in ('admin', '_admin_invitation') and pronamespace='multitenancy'::regnamespace and pg_get_functiondef(oid) ilike '%invitation.create%'),
   'multitenancy.admin handles invitation.create'
 );
 select ok(
-  (select pg_get_functiondef(oid) ilike '%invitation.resend%' from pg_proc where proname='admin' and pronamespace='multitenancy'::regnamespace limit 1),
+  exists (select 1 from pg_proc where proname in ('admin', '_admin_invitation') and pronamespace='multitenancy'::regnamespace and pg_get_functiondef(oid) ilike '%invitation.resend%'),
   'multitenancy.admin handles invitation.resend'
 );
 select ok(
-  (select pg_get_functiondef(oid) ilike '%invitation.revoke%' from pg_proc where proname='admin' and pronamespace='multitenancy'::regnamespace limit 1),
+  exists (select 1 from pg_proc where proname in ('admin', '_admin_invitation') and pronamespace='multitenancy'::regnamespace and pg_get_functiondef(oid) ilike '%invitation.revoke%'),
   'multitenancy.admin handles invitation.revoke'
 );
 
@@ -69,9 +69,13 @@ select ok(
 
 -- audit never stores raw token
 select ok(
-  (select pg_get_functiondef(oid) ilike '%audit_events%' from pg_proc where proname='admin' and pronamespace='multitenancy'::regnamespace limit 1)
-  and (select pg_get_functiondef(oid) ilike '%jsonb_build_object(''email'',v_email_norm,''expires_at'',v_expires_at)%'
-       from pg_proc where proname='admin' and pronamespace='multitenancy'::regnamespace limit 1),
+  exists (
+    select 1 from pg_proc
+    where proname in ('admin', '_admin_invitation')
+      and pronamespace='multitenancy'::regnamespace
+      and pg_get_functiondef(oid) ilike '%_admin_audit%'
+      and pg_get_functiondef(oid) ilike '%jsonb_build_object(''email'',v_email_norm,''expires_at'',v_expires_at)%'
+  ),
   'admin audit does not log raw token (manual review of payload)'
 );
 
