@@ -21,11 +21,24 @@ const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-function runDbaSql(sql: string): string {
+function runDbaSql(sql: string, retries = 3): string {
   const tmpFile = join(tmpdir(), `query_${Date.now()}_${Math.random().toString(36).substring(2)}.sql`);
   writeFileSync(tmpFile, sql, "utf8");
   try {
-    return execSync(`supabase db query --linked --file "${tmpFile}"`, { stdio: "pipe", encoding: "utf8" });
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        return execSync(`supabase db query --linked --file "${tmpFile}"`, { stdio: "pipe", encoding: "utf8" });
+      } catch (err: unknown) {
+        const msg = String(err);
+        if (attempt < retries && (msg.includes("502") || msg.includes("503") || msg.includes("Bad gateway"))) {
+          const waitMs = attempt * 1000;
+          execSync(`sleep ${waitMs / 1000}`);
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("runDbaSql failed after retries");
   } finally {
     try {
       unlinkSync(tmpFile);

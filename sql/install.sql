@@ -496,7 +496,7 @@ begin
 end;
 $$;
 
-grant usage on schema multitenancy to authenticated, service_role;
+grant usage on schema multitenancy to anon, authenticated, service_role;
 revoke all on function multitenancy.access_level(uuid,text,uuid[]) from public, anon;
 revoke all on function multitenancy.has_access(uuid,text,uuid[],text) from public, anon;
 revoke all on function multitenancy.authorize(uuid,text,uuid[]) from public, anon;
