@@ -119,7 +119,7 @@ Every multi-tenant business table MUST include:
 2. Optional `project_id uuid null` (or any scope column) with foreign key:
    `foreign key (tenant_id, project_id) references multitenancy.scopes(tenant_id, id) on delete restrict`
 3. `author_id uuid not null default auth.uid() references auth.users(id)`
-4. Key immutability trigger: `api.enforce_protected_keys_immutable('project_id')`
+4. Key immutability trigger: `api.enforce_protected_keys_immutable('tenant_id', 'project_id')`
 5. Fast composite index on `(tenant_id, project_id)`
 
 ```sql
@@ -142,10 +142,10 @@ create table public.documents (
 create index idx_documents_tenant_scope on public.documents(tenant_id, project_id);
 create index idx_documents_author on public.documents(author_id);
 
--- Enforce key immutability (prevents cross-tenant moving)
+-- Enforce key immutability (prevents tenant-hopping or moving between projects on update)
 create trigger trg_documents_protect
   before update on public.documents
-  for each row execute function api.enforce_protected_keys_immutable('project_id');
+  for each row execute function api.enforce_protected_keys_immutable('tenant_id', 'project_id');
 
 alter table public.documents enable row level security;
 ```
@@ -155,6 +155,9 @@ alter table public.documents enable row level security;
 ### Step 5: Canonical RLS Policy Templates for Agents
 
 When generating RLS policies, use these exact battle-tested patterns:
+
+> 💡 **Nullable Scopes (`project_id NULL`)**:  
+> When a table allows unscoped tenant-wide rows (`project_id is null`), passing `array[project_id]` is fully supported: `api.access_level()` automatically normalizes `{NULL}` to an unscoped request (`{}`), ensuring tenant-wide managers and members access unscoped rows while project-scoped users access only their assigned scopes.
 
 #### 1. SELECT (Read Policy)
 ```sql

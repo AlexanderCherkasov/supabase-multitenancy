@@ -41,7 +41,7 @@ set access_level = excluded.access_level;
 create table if not exists public.documents (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references multitenancy.tenants(id) on delete cascade,
-  project_id uuid not null,
+  project_id uuid null,
   author_id uuid not null references auth.users(id),
   title text not null,
   body text not null default '',

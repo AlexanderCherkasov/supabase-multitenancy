@@ -81,10 +81,11 @@ The package is partitioned into 16 focused, maintainable migrations (each under 
 
 ## Performance Characteristics
 
-All core security routines are marked `STABLE SECURITY DEFINER` with fixed `search_path = ''`:
-- **Query Optimizer Inlining**: PostgreSQL optimizes multiple calls within a single query plan, preventing $N+1$ function execution loops.
-- **Index-Covered Traversal**: Composite indexes on `(tenant_id, membership_id, scope_id)` allow PostgreSQL to resolve `access_level` in sub-millisecond time ($<0.035\text{ ms}$).
-- **RLS Overhead**: Adds less than $0.001\text{ ms}$ ($1\ \mu\text{s}$) over unconstrained raw queries on tables with 100,000+ rows.
+All core security routines are declared `STABLE SECURITY DEFINER` with fixed `search_path = ''`:
+- **Execution Model**: PostgreSQL evaluates RLS predicates per candidate row returned by an index filter. Therefore, `access_level` is designed to complete in microseconds ($10\text{–}19\ \mu\text{s}$) per invocation.
+- **Index-Covered Traversal**: Composite unique B-tree indexes on `(tenant_id, membership_id, scope_id)` allow PostgreSQL to resolve `access_level` via compact index lookups without heap scans.
+- **Fast Short-Circuits**: Tenant owners (`owner_user_id = auth.uid()`) and non-members exit on the first index probe.
+- **Reproducible Suite**: The repository includes an automated benchmark runner (`npm run benchmark`) to measure exact throughput and explain plans on local PostgreSQL.
 
 ---
 

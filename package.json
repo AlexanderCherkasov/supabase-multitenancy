@@ -56,6 +56,7 @@
     "build": "npm run build:sql && tsc",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/tests/unit/*.test.js",
+    "benchmark": "node bench/authorization.mjs",
     "prepublishOnly": "npm run test"
   },
   "engines": {

@@ -74,6 +74,11 @@ begin
     where t.id = p_tenant_id and t.owner_user_id = v_uid
   ) then return 'all'; end if;
 
+  -- Normalize scope array: strip any null values passed by single-column expressions like array[project_id]
+  if p_scope_ids is not null then
+    p_scope_ids := array_remove(p_scope_ids, null);
+  end if;
+
   if p_scope_ids is null or cardinality(p_scope_ids) = 0 then
     select max(case rp.access_level when 'all' then 2 when 'own' then 1 else 0 end)
       into v_rank
@@ -85,8 +90,6 @@ begin
       and rp.permission_id = v_permission_id;
     return case coalesce(v_rank, 0) when 2 then 'all' when 1 then 'own' else 'none' end;
   end if;
-
-  if array_position(p_scope_ids, null) is not null then return 'none'; end if;
 
   foreach v_scope_id in array p_scope_ids loop
     if not exists (

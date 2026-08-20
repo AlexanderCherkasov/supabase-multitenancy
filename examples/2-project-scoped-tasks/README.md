@@ -36,6 +36,6 @@ This example demonstrates complete **Scope Restriction and Isolation** across mu
 
 ## 📁 Files in this Example
 
-1. [`01_permissions_and_roles.sql`](file:///Users/alexander/dev/supabase-multitenancy/examples/2-project-scoped-tasks/01_permissions_and_roles.sql): Declares permissions and roles (`task_viewer`, `task_editor`, `task_manager`).
-2. [`02_tasks_table_and_rls.sql`](file:///Users/alexander/dev/supabase-multitenancy/examples/2-project-scoped-tasks/02_tasks_table_and_rls.sql): Table `tasks` with composite foreign key and RLS policies passing `array[project_id]`.
-3. [`workflow_scoped_tasks.ts`](file:///Users/alexander/dev/supabase-multitenancy/examples/2-project-scoped-tasks/workflow_scoped_tasks.ts): End-to-end runnable script demonstrating multi-user scope isolation.
+1. [`01_permissions_and_roles.sql`](01_permissions_and_roles.sql): Declares permissions and roles (`task_viewer`, `task_editor`, `task_manager`).
+2. [`02_tasks_table_and_rls.sql`](02_tasks_table_and_rls.sql): Table `tasks` with composite foreign key and RLS policies passing `array[project_id]`.
+3. [`workflow_scoped_tasks.ts`](workflow_scoped_tasks.ts): End-to-end runnable script demonstrating multi-user scope isolation.

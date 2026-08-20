@@ -20,9 +20,9 @@ This architecture keeps the database core secure and immutable, while giving you
 
 ## 📁 Files in this Example
 
-1. [`01_schema_and_collaborators.sql`](file:///Users/alexander/dev/supabase-multitenancy/examples/3-collaborators-and-custom-predicates/01_schema_and_collaborators.sql): Creates `public.documents` and `public.document_collaborators`.
-2. [`02_custom_predicate_and_rls.sql`](file:///Users/alexander/dev/supabase-multitenancy/examples/3-collaborators-and-custom-predicates/02_custom_predicate_and_rls.sql): Defines the `is_document_collaborator` `SECURITY INVOKER` function and attaches RLS policies.
-3. [`03_collaborators_workflow.ts`](file:///Users/alexander/dev/supabase-multitenancy/examples/3-collaborators-and-custom-predicates/03_collaborators_workflow.ts): End-to-end TypeScript workflow showing how an author shares a document with a teammate.
+1. [`01_schema_and_collaborators.sql`](01_schema_and_collaborators.sql): Creates `public.documents` and `public.document_collaborators`.
+2. [`02_custom_predicate_and_rls.sql`](02_custom_predicate_and_rls.sql): Defines the `is_document_collaborator` `SECURITY INVOKER` function and attaches RLS policies.
+3. [`03_collaborators_workflow.ts`](03_collaborators_workflow.ts): End-to-end TypeScript workflow showing how an author shares a document with a teammate.
 
 ---
 

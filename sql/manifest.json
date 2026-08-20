@@ -30,7 +30,7 @@
     {
       "version": "0.3.0",
       "file": "migrations/006_authorize.sql",
-      "checksum": "57ff50949cd93a69f7458ef0ca4963193b4815f825717067acad4ed048595278"
+      "checksum": "aa2a5fade4fb5593eb4f56e667f620c133b0ce641046786923ebd9c6eb9bc368"
     },
     {
       "version": "0.3.0",

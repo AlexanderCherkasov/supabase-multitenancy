@@ -102,15 +102,17 @@ create table public.<resources> (
 
 create index idx_<resources>_tenant_scope on public.<resources>(tenant_id, scope_id);
 
--- Enforce key immutability on update
+-- Enforce key immutability on update (prevents tenant hopping and scope changes)
 create trigger trg_<resources>_protect
   before update on public.<resources>
-  for each row execute function api.enforce_protected_keys_immutable('scope_id');
+  for each row execute function api.enforce_protected_keys_immutable('tenant_id', 'scope_id');
 
 alter table public.<resources> enable row level security;
 ```
 
 ### 5. Generate Standard RLS Policies
+
+> 💡 **Nullable Scopes (`scope_id NULL`)**: Passing `array[scope_id]` normalizes `{NULL}` to an unscoped request (`{}`), ensuring tenant-wide managers/viewers access unscoped rows while scoped members access only their assigned scopes.
 
 ```sql
 -- SELECT (Read)

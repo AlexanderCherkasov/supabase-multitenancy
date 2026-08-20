@@ -25,7 +25,7 @@ create index if not exists idx_documents_author on public.documents(author_id);
 drop trigger if exists trg_documents_protected_keys on public.documents;
 create trigger trg_documents_protected_keys
   before update on public.documents
-  for each row execute function api.enforce_protected_keys_immutable('project_id');
+  for each row execute function api.enforce_protected_keys_immutable('tenant_id', 'project_id');
 
 -- Enable RLS
 alter table public.documents enable row level security;

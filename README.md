@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![AI Agent Guide](https://img.shields.io/badge/AI%20Agent-Design%20Guide-purple.svg)](AGENT_GUIDE.md)
 
-A SQL-first multi-tenancy and RBAC foundation for **Supabase**. The database is the source of truth: tenant namespaces, hierarchical scopes, memberships, DBA-managed global and tenant-specific role profiles, `own|all` RLS authorization, invitations, audit logging, and paginated RPCs.
+A SQL-first multi-tenancy and RBAC foundation for **Supabase**. The database is the source of truth: tenant namespaces, typed scopes, memberships, DBA-managed global and tenant-specific role profiles, `own|all` RLS authorization, invitations, audit logging, and paginated RPCs.
 
 > 🤖 **Building with AI Agents?** See [`AGENT_GUIDE.md`](AGENT_GUIDE.md) for deterministic prompt rules, schema patterns, and canonical RLS templates for LLM assistants (Antigravity, Cursor, Claude Code, Copilot).
 
@@ -128,10 +128,10 @@ create table public.documents (
     on delete restrict
 );
 
--- Protect tenant_id and project_id from being altered on update
+-- Protect BOTH tenant_id and project_id from being altered on update
 create trigger trg_documents_protect
   before update on public.documents
-  for each row execute function api.enforce_protected_keys_immutable('project_id');
+  for each row execute function api.enforce_protected_keys_immutable('tenant_id', 'project_id');
 
 -- Enable RLS
 alter table public.documents enable row level security;
@@ -140,6 +140,9 @@ alter table public.documents enable row level security;
 ---
 
 ### Step 4: Write Clean RLS Policies
+
+> 💡 **Nullable Scopes (`project_id NULL`)**:  
+> If your table allows unscoped tenant-wide rows (`project_id is null`), simply pass `array[project_id]`. `api.access_level()` automatically normalizes `{NULL}` to an unscoped request, ensuring tenant-wide managers and members access unscoped rows while project-scoped users access only their assigned scopes.
 
 #### 📖 Scenario A: User reads ONLY THEIR OWN rows vs Managers read ALL rows
 ```sql
@@ -351,35 +354,46 @@ print("User context:", context)
 
 ---
 
-## ⚡ Performance & RLS Overhead Benchmarks
+## ⚡ Performance & RLS Benchmarks
 
-All authorization checks in `supabase-multitenancy` are designed for extreme throughput on standard PostgreSQL. Security functions are declared `STABLE SECURITY DEFINER` with fixed `search_path = ''`, allowing PostgreSQL's query optimizer to evaluate role checks once per statement and utilize composite index scans.
+All authorization checks in `supabase-multitenancy` are designed for low latency on standard PostgreSQL. Security functions run as `SECURITY DEFINER` with fixed `search_path = ''`. Because RLS predicates evaluate per candidate row returned by an index filter, authorization lookup speed is critical.
 
 ### 1. Direct Authorization Latency (`api.access_level`)
 
-Micro-benchmarking 100 iterations per role tier on local PostgreSQL:
+Micro-benchmarking 200 sample iterations per role tier on local PostgreSQL 15:
 
-| User Tier | Access Level | Mean Latency | p50 (Median) | p95 | Max Throughput |
+| User Tier | Access Level | p50 (Median) | p95 | Mean Latency | Throughput |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Tenant Owner** | `is_owner` exit | **`0.019 ms`** | `0.018 ms` | `0.022 ms` | ~52,000 checks/sec |
-| **Outsider** | Unauthorized / Non-member | **`0.018 ms`** | `0.017 ms` | `0.020 ms` | ~55,000 checks/sec |
-| **Writer** | Scoped `own` role | **`0.032 ms`** | `0.032 ms` | `0.037 ms` | ~31,000 checks/sec |
-| **Manager** | Tenant-wide `all` role | **`0.033 ms`** | `0.032 ms` | `0.037 ms` | ~30,000 checks/sec |
+| **Tenant Owner** | `is_owner` bypass exit | **`0.010 ms`** | `0.012 ms` | `0.010 ms` | ~100,000 checks/sec |
+| **Outsider** | Non-member fast exit | **`0.009 ms`** | `0.011 ms` | `0.010 ms` | ~103,000 checks/sec |
+| **Manager** | Tenant-wide `all` check | **`0.014 ms`** | `0.018 ms` | `0.014 ms` | ~70,000 checks/sec |
+| **Writer** | Scoped `own` check | **`0.018 ms`** | `0.024 ms` | `0.019 ms` | ~53,000 checks/sec |
 
-### 2. End-to-End Query Latency & RLS Overhead
+### 2. End-to-End Query Latency on 100,000 Rows
 
-Comparison against raw unconstrained PostgreSQL queries (100,000 rows in table):
+Comparison on a table with 100,000 rows indexed on `(tenant_id, project_id)`:
 
-| Query Type | Baseline (No RLS) | Simple RLS (`uid = author`) | `supabase-multitenancy` (Manager) | Added Overhead | Throughput |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Single Row PK Lookup** | `0.0077 ms` | `0.0078 ms` | **`0.0082 ms`** | **`+0.0005 ms`** | **121,950 QPS** |
-| **50-Row Filter Scan** | `0.0152 ms` | `0.0148 ms` | **`0.0164 ms`** | **`+0.0012 ms`** | **61,000 QPS** |
-| **Unauthorized Attempt** | `0.0077 ms` | `0.0075 ms` | **`0.0075 ms`** | **`0.0000 ms`** | **133,330 QPS** |
+| Query Scenario | p50 (ms) | p95 (ms) | Mean (ms) | QPS |
+| :--- | :--- | :--- | :--- | :--- |
+| **Single Row PK Lookup (No RLS)** | `0.010 ms` | `0.012 ms` | `0.011 ms` | ~92,000 QPS |
+| **Single Row PK Lookup (Manager 'all')** | `0.045 ms` | `0.053 ms` | `0.045 ms` | ~22,000 QPS |
+| **Single Row PK Lookup (Writer 'own')** | `0.042 ms` | `0.067 ms` | `0.047 ms` | ~21,000 QPS |
+| **Single Row PK Lookup (Outsider Denied)** | `0.029 ms` | `0.037 ms` | `0.030 ms` | ~33,000 QPS |
+| **50-Row Filter Scan (Baseline, Direct filter)** | `0.013 ms` | `0.015 ms` | `0.014 ms` | ~74,000 QPS |
+| **50-Row Filter Scan (Supabase-MT Manager)** | `0.776 ms` | `0.884 ms` | `0.793 ms` | ~1,260 QPS |
 
-> **Why is the overhead negligible ($<0.001\text{ ms}$)?**
-> 1. **Index-Covered Queries**: Role assignments and memberships are indexed with unique composite b-trees (`tenant_id`, `membership_id`, `scope_id`).
-> 2. **Short-Circuit Evaluation**: Owners and non-members exit immediately on the first index probe.
-> 3. **Stable Function Inlining**: PostgreSQL treats `STABLE` functions as invariants during single statement execution, avoiding repeated subquery evaluations per row.
+### 3. How to Reproduce Benchmarks Locally
+
+Run the automated benchmark suite against your local PostgreSQL instance:
+
+```bash
+npm run benchmark
+```
+
+> **Why is evaluation fast ($10\text{–}19\ \mu\text{s}$ per row)?**
+> 1. **Index-Covered Queries**: Role assignments and memberships are indexed with unique composite B-trees (`tenant_id`, `membership_id`, `scope_id`).
+> 2. **Short-Circuit Exits**: Owners and non-members exit immediately on the first index probe.
+> 3. **Buffer Pool Caching**: The compact RBAC catalog stays resident in PostgreSQL shared memory buffers.
 
 ---
 
@@ -397,8 +411,8 @@ Comparison against raw unconstrained PostgreSQL queries (100,000 rows in table):
 
 Explore fully runnable examples in [`examples/`](examples):
 - [`examples/1-saas-starter-documents`](examples/1-saas-starter-documents): Multi-tenant documents app with global `viewer`, `editor`, and `manager` roles.
-- [`examples/2-project-scoped-tasks`](file:///Users/alexander/dev/supabase-multitenancy/examples/2-project-scoped-tasks): Strict project scope restrictions and multi-project isolation within an organization.
-- [`examples/3-collaborators-and-custom-predicates`](file:///Users/alexander/dev/supabase-multitenancy/examples/3-collaborators-and-custom-predicates): Document sharing & collaborators list via custom `SECURITY INVOKER` predicates.
+- [`examples/2-project-scoped-tasks`](examples/2-project-scoped-tasks): Strict project scope restrictions and multi-project isolation within an organization.
+- [`examples/3-collaborators-and-custom-predicates`](examples/3-collaborators-and-custom-predicates): Document sharing & collaborators list via custom `SECURITY INVOKER` predicates.
 
 ---
 
@@ -410,11 +424,11 @@ This repository includes first-class support for **AI Coding Assistants** (Antig
 
 | Resource | Purpose | Path |
 | :--- | :--- | :--- |
-| **Agent Skill** | Pre-configured skill definition with triggers, guardrails, and templates | [`.skills/supabase-multitenancy/SKILL.md`](file:///Users/alexander/dev/supabase-multitenancy/.skills/supabase-multitenancy/SKILL.md) |
-| **Agent Skill (Mirror)** | Standard `.agents` mirror for agent compatibility | [`.agents/skills/supabase-multitenancy/SKILL.md`](file:///Users/alexander/dev/supabase-multitenancy/.agents/skills/supabase-multitenancy/SKILL.md) |
-| **Implementation Guide** | Full design document with canonical RLS patterns and anti-pattern checklists | [`AGENT_GUIDE.md`](file:///Users/alexander/dev/supabase-multitenancy/AGENT_GUIDE.md) |
-| **LLM Discovery** | Standard LLM summary file for fast context ingestion | [`llms.txt`](file:///Users/alexander/dev/supabase-multitenancy/llms.txt) |
-| **Agent Rules** | Workspace-level rules for AI coding assistants | [`AGENTS.md`](file:///Users/alexander/dev/supabase-multitenancy/AGENTS.md) |
+| **Agent Skill** | Pre-configured skill definition with triggers, guardrails, and templates | [`.skills/supabase-multitenancy/SKILL.md`](.skills/supabase-multitenancy/SKILL.md) |
+| **Agent Skill (Mirror)** | Standard `.agents` mirror for agent compatibility | [`.agents/skills/supabase-multitenancy/SKILL.md`](.agents/skills/supabase-multitenancy/SKILL.md) |
+| **Implementation Guide** | Full design document with canonical RLS patterns and anti-pattern checklists | [`AGENT_GUIDE.md`](AGENT_GUIDE.md) |
+| **LLM Discovery** | Standard LLM summary file for fast context ingestion | [`llms.txt`](llms.txt) |
+| **Agent Rules** | Workspace-level rules for AI coding assistants | [`AGENTS.md`](AGENTS.md) |
 
 ### How to Use with AI Agents
 

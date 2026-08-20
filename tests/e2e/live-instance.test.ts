@@ -110,6 +110,7 @@ if (!url || !anonKey || !dbUrl) {
   test("v0.3 local HTTP/Auth/PostgREST authorization gate", async (t) => {
     const owner = await createUser("owner");
     const writer = await createUser("writer");
+    const tenantManager = await createUser("tenant-manager");
     const tenantReader = await createUser("tenant-reader");
     const delegatedAdmin = await createUser("delegated-admin");
     const concurrentInvitee = await createUser("concurrent-invitee");
@@ -232,6 +233,7 @@ if (!url || !anonKey || !dbUrl) {
       );
     });
 
+    await inviteAndAccept(owner, tenantManager, tenantId, [{ role_key: "e2e_manager", scope_id: null }]);
     await inviteAndAccept(owner, tenantReader, tenantId, [{ role_key: tenantRoleKey, scope_id: scopeOne.id }]);
     await inviteAndAccept(owner, delegatedAdmin, tenantId, [{ role_key: "e2e_limited_admin", scope_id: null }]);
 
@@ -246,14 +248,27 @@ if (!url || !anonKey || !dbUrl) {
       }).select("id").single();
       assert.ifError(ownerTwo.error);
       assert.ok(ownerTwo.data);
+      const ownerUnscoped = await owner.client.from("documents").insert({
+        tenant_id: tenantId, project_id: null, author_id: owner.id, title: "owner unscoped doc",
+      }).select("id, project_id").single();
+      assert.ifError(ownerUnscoped.error);
+      assert.ok(ownerUnscoped.data);
+
       const ownInsert = await writer.client.from("documents").insert({
         tenant_id: tenantId, project_id: scopeOne.id, author_id: writer.id, title: "writer scope one",
       }).select("id, project_id").single();
       assert.ifError(ownInsert.error);
       assert.ok(ownInsert.data);
+
       const writerRows = await writer.client.from("documents").select("id").eq("tenant_id", tenantId);
       assert.ifError(writerRows.error);
       assert.deepEqual(writerRows.data?.map((row) => row.id), [ownInsert.data.id]);
+
+      const managerRows = await tenantManager.client.from("documents").select("id").eq("tenant_id", tenantId);
+      assert.ifError(managerRows.error);
+      assert.ok(managerRows.data?.some((row) => row.id === ownerUnscoped.data.id), "tenant manager sees unscoped document with project_id null");
+      assert.ok(managerRows.data?.some((row) => row.id === ownerOne.data.id), "tenant manager sees scoped document");
+
       const wrongScope = await writer.client.from("documents").insert({
         tenant_id: tenantId, project_id: scopeTwo.id, author_id: writer.id, title: "writer wrong scope",
       });
@@ -262,6 +277,7 @@ if (!url || !anonKey || !dbUrl) {
       assert.ifError(specialRows.error);
       assert.ok(specialRows.data?.some((row) => row.id === ownerOne.data.id), "tenant-specific all role reads its scope");
       assert.equal(specialRows.data?.some((row) => row.id === ownerTwo.data.id), false, "tenant-specific role cannot read another scope");
+      assert.equal(specialRows.data?.some((row) => row.id === ownerUnscoped.data.id), false, "scoped reader cannot read unscoped doc");
       const outsiderRead = await outsider.client.from("documents").select("id").eq("tenant_id", tenantId);
       assert.ifError(outsiderRead.error);
       assert.equal(outsiderRead.data?.length ?? 0, 0, "other tenant sees no rows");

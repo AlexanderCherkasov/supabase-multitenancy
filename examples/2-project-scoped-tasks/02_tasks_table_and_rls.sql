@@ -27,7 +27,7 @@ create index if not exists idx_tasks_tenant_author on public.tasks(tenant_id, au
 drop trigger if exists trg_tasks_protect on public.tasks;
 create trigger trg_tasks_protect
   before update on public.tasks
-  for each row execute function api.enforce_protected_keys_immutable('project_id');
+  for each row execute function api.enforce_protected_keys_immutable('tenant_id', 'project_id');
 
 -- Enable Row-Level Security
 alter table public.tasks enable row level security;
