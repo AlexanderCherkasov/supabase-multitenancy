@@ -44,7 +44,7 @@ on public.documents
 for select
 to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'documents.read', array[project_id])
+  case api.access_level(tenant_id, 'documents.read', array[project_id])
     when 'all' then true
     when 'own' then (
       author_id = auth.uid()
@@ -64,7 +64,7 @@ on public.documents
 for update
 to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'documents.update', array[project_id])
+  case api.access_level(tenant_id, 'documents.update', array[project_id])
     when 'all' then true
     when 'own' then (
       author_id = auth.uid()
@@ -74,7 +74,7 @@ using (
   end
 )
 with check (
-  case multitenancy.access_level(tenant_id, 'documents.update', array[project_id])
+  case api.access_level(tenant_id, 'documents.update', array[project_id])
     when 'all' then true
     when 'own' then (
       author_id = auth.uid()
@@ -92,7 +92,7 @@ for insert
 to authenticated
 with check (
   author_id = auth.uid()
-  and multitenancy.has_access(tenant_id, 'documents.create', array[project_id], 'own')
+  and api.has_access(tenant_id, 'documents.create', array[project_id], 'own')
 );
 
 -- 4. DELETE (Remove Documents)
@@ -103,10 +103,10 @@ on public.documents
 for delete
 to authenticated
 using (
-  multitenancy.has_access(tenant_id, 'documents.delete', array[project_id], 'all')
+  api.has_access(tenant_id, 'documents.delete', array[project_id], 'all')
   or (
     author_id = auth.uid()
-    and multitenancy.has_access(tenant_id, 'documents.delete', array[project_id], 'own')
+    and api.has_access(tenant_id, 'documents.delete', array[project_id], 'own')
   )
 );
 
@@ -121,7 +121,7 @@ for select
 to authenticated
 using (
   user_id = auth.uid()
-  or multitenancy.has_access(tenant_id, 'documents.read', null, 'all')
+  or api.has_access(tenant_id, 'documents.read', null, 'all')
   or exists (
     select 1 from public.documents d
     where d.id = document_collaborators.document_id and d.author_id = auth.uid()
@@ -134,14 +134,14 @@ on public.document_collaborators
 for all
 to authenticated
 using (
-  multitenancy.has_access(tenant_id, 'documents.update', null, 'all')
+  api.has_access(tenant_id, 'documents.update', null, 'all')
   or exists (
     select 1 from public.documents d
     where d.id = document_collaborators.document_id and d.author_id = auth.uid()
   )
 )
 with check (
-  multitenancy.has_access(tenant_id, 'documents.update', null, 'all')
+  api.has_access(tenant_id, 'documents.update', null, 'all')
   or exists (
     select 1 from public.documents d
     where d.id = document_collaborators.document_id and d.author_id = auth.uid()

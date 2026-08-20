@@ -10,7 +10,7 @@ This repository provides a SQL-first multi-tenancy and RBAC foundation for Supab
 - Run Python unit tests: `PYTHONPATH=python/src python3 -m unittest python/tests/test_client.py`
 
 ## Architecture Rules
-1. **Schema**: All package tables and routines (`create_tenant`, `can`, `context`, `invitation_preview`, `accept_invitation`, `admin`) reside in the `multitenancy` schema.
+1. **Schema**: Package tables and implementation routines reside in private `multitenancy`; client-facing RPCs and RLS helpers are exposed through `api` wrappers.
 2. **Access Model**: Permissions are mapped to roles using `'own'` or `'all'`.
-3. **Immutability**: Always protect tenant and scope foreign keys with `multitenancy.enforce_protected_keys_immutable()`.
+3. **Immutability**: Always protect tenant and scope foreign keys with `api.enforce_protected_keys_immutable()`.
 4. **Reference**: See `AGENT_GUIDE.md` and `.skills/supabase-multitenancy/SKILL.md` for RLS patterns and workflows.

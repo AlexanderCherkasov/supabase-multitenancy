@@ -11,7 +11,7 @@ This guide provides deterministic, step-by-step instructions, schema patterns, a
 When a user asks you to build a multi-tenant application, SaaS platform, B2B tool, or organization-based RBAC on Supabase:
 
 1. **DO NOT invent custom RLS helper functions or ad-hoc tenant loops.**
-2. **DO NOT put package functions or tables in the `public` schema.** All multitenancy tables and RPCs live strictly in schema `multitenancy`.
+2. **Keep package internals private.** All package tables and implementation routines live in `multitenancy`; client RPCs and RLS helpers use the exposed `api` wrappers. Never expose `multitenancy` through the Data API.
 3. **DO NOT store SQL function names in role tables.** Use the `own` vs `all` contract and compose predicates in RLS migrations.
 4. **DO NOT use `service_role` in frontend or user requests.** All user queries run via authenticated JWT through PostgREST; the database RLS policies enforce isolation automatically.
 
@@ -30,14 +30,14 @@ Step 3: Define DBA Role Profiles with 'own' vs 'all' (multitenancy.roles)
    ↓
 Step 4: Create Business Tables with Tenant/Scope Foreign Keys & Triggers
    ↓
-Step 5: Attach Canonical RLS Policies with access_level() / has_access()
+Step 5: Attach Canonical RLS Policies with api.access_level() / api.has_access()
 ```
 
 ---
 
 ### Step 1: Database Baseline Migration
 
-Ensure `sql/install.sql` is applied in the target database. All multi-tenancy routines will be available under the `multitenancy` schema.
+Ensure `sql/install.sql` is applied in the target database. Client-facing routines are available under the exposed `api` schema; implementation tables remain under private `multitenancy`.
 
 ---
 
@@ -75,8 +75,8 @@ declare
   v_manager uuid;
 begin
   -- 1. Viewer Role
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'viewer', 'Viewer', 'Read-only access to own/assigned resources')
+  insert into multitenancy.roles (key, name, description)
+  values ('viewer', 'Viewer', 'Read-only access to own/assigned resources')
   returning id into v_viewer;
 
   insert into multitenancy.role_permissions (role_id, permission_id, access_level)
@@ -84,8 +84,8 @@ begin
   from multitenancy.permissions where key in ('projects.read', 'documents.read');
 
   -- 2. Editor Role
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'editor', 'Editor', 'Author and edit own resources')
+  insert into multitenancy.roles (key, name, description)
+  values ('editor', 'Editor', 'Author and edit own resources')
   returning id into v_editor;
 
   insert into multitenancy.role_permissions (role_id, permission_id, access_level)
@@ -93,8 +93,8 @@ begin
   from multitenancy.permissions where key in ('projects.read', 'documents.read', 'documents.write');
 
   -- 3. Manager Role
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'manager', 'Manager', 'Full control over all resources in tenant/scope')
+  insert into multitenancy.roles (key, name, description)
+  values ('manager', 'Manager', 'Full control over all resources in tenant/scope')
   returning id into v_manager;
 
   insert into multitenancy.role_permissions (role_id, permission_id, access_level)
@@ -106,6 +106,10 @@ begin
 end $$;
 ```
 
+These are global roles: omit `tenant_id`. For an exceptional DBA-only role
+restricted to one tenant, insert a non-NULL `tenant_id` and a distinct global
+`key`; never create it through `api.admin` or an SDK method.
+
 ---
 
 ### Step 4: Business Table Creation Pattern
@@ -115,7 +119,7 @@ Every multi-tenant business table MUST include:
 2. Optional `project_id uuid null` (or any scope column) with foreign key:
    `foreign key (tenant_id, project_id) references multitenancy.scopes(tenant_id, id) on delete restrict`
 3. `author_id uuid not null default auth.uid() references auth.users(id)`
-4. Key immutability trigger: `multitenancy.enforce_protected_keys_immutable('project_id')`
+4. Key immutability trigger: `api.enforce_protected_keys_immutable('project_id')`
 5. Fast composite index on `(tenant_id, project_id)`
 
 ```sql
@@ -141,7 +145,7 @@ create index idx_documents_author on public.documents(author_id);
 -- Enforce key immutability (prevents cross-tenant moving)
 create trigger trg_documents_protect
   before update on public.documents
-  for each row execute function multitenancy.enforce_protected_keys_immutable('project_id');
+  for each row execute function api.enforce_protected_keys_immutable('project_id');
 
 alter table public.documents enable row level security;
 ```
@@ -157,7 +161,7 @@ When generating RLS policies, use these exact battle-tested patterns:
 create policy "documents_select" on public.documents
 for select to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'documents.read', array[project_id])
+  case api.access_level(tenant_id, 'documents.read', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
@@ -171,7 +175,7 @@ create policy "documents_insert" on public.documents
 for insert to authenticated
 with check (
   author_id = auth.uid()
-  and multitenancy.has_access(tenant_id, 'documents.write', array[project_id], 'own')
+  and api.has_access(tenant_id, 'documents.write', array[project_id], 'own')
 );
 ```
 
@@ -180,14 +184,14 @@ with check (
 create policy "documents_update" on public.documents
 for update to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'documents.write', array[project_id])
+  case api.access_level(tenant_id, 'documents.write', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
   end
 )
 with check (
-  case multitenancy.access_level(tenant_id, 'documents.write', array[project_id])
+  case api.access_level(tenant_id, 'documents.write', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
@@ -200,7 +204,7 @@ with check (
 create policy "documents_delete" on public.documents
 for delete to authenticated
 using (
-  multitenancy.has_access(tenant_id, 'documents.delete', array[project_id], 'all')
+  api.has_access(tenant_id, 'documents.delete', array[project_id], 'all')
 );
 ```
 
@@ -230,7 +234,7 @@ $$;
 create policy "documents_select_shared" on public.documents
 for select to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'documents.read', array[project_id])
+  case api.access_level(tenant_id, 'documents.read', array[project_id])
     when 'all' then true
     when 'own' then (
       author_id = auth.uid()
@@ -293,15 +297,15 @@ export function DocumentEditor({ tenantId, projectId, documentId }) {
 | **Bypassing RLS with `supabaseAdmin` / `service_role` in user routes** | Let the user's JWT authenticate the request and let database RLS policies filter rows. |
 | **Storing custom role definitions via API endpoints** | Roles and permissions are migration-owned. Use `mt.members.setGrants` to assign existing roles. |
 | **Using `SECURITY DEFINER` on custom app predicates** | Custom table predicates must be `SECURITY INVOKER` to prevent privilege escalation. |
-| **Modifying `tenant_id` on update** | Always attach `multitenancy.enforce_protected_keys_immutable()` trigger to prevent tenant hopping. |
-| **Calling RPCs from the `public` schema** | All package RPCs are schema-scoped in `multitenancy` (`create_tenant`, `can`, `context`, `invitation_preview`, `accept_invitation`, `admin`). |
+| **Modifying `tenant_id` on update** | Always attach `api.enforce_protected_keys_immutable()` trigger to prevent tenant hopping. |
+| **Calling private RPCs** | Client code and RLS use exposed `api` (`create_tenant`, `can`, `context`, `context_page`, `invitation_preview`, `accept_invitation`, `admin`); never expose `multitenancy`. |
 
 ---
 
 ## 📚 Quick Reference Cheat Sheet
 
-- **`multitenancy.create_tenant(slug, name)`**: Creates new tenant and makes current user owner.
-- **`multitenancy.can(tenant_id, permission, scope_ids)`**: Returns `boolean` for UI permission checks.
-- **`multitenancy.context(tenant_id, section)`**: Fetches live dashboard data (`'self'`, `'members'`, `'scopes'`, `'roles'`, `'audit'`).
-- **`multitenancy.access_level(tenant_id, permission, scope_ids)`**: Returns `'none' | 'own' | 'all'` inside RLS policies.
-- **`multitenancy.has_access(tenant_id, permission, scope_ids, required_level)`**: Compares access level in RLS policies.
+- **`api.create_tenant(slug, name)`**: Creates a tenant and active owner membership.
+- **`api.can(tenant_id, permission, scope_ids)`**: Returns `boolean` for UI permission checks.
+- **`api.context(tenant_id, section)`**: Returns an array for list sections; use `api.context_page` for a cursor page.
+- **`api.access_level(tenant_id, permission, scope_ids)`**: Returns `'none' | 'own' | 'all'` inside RLS policies.
+- **`api.has_access(tenant_id, permission, scope_ids, required_level)`**: Compares access level in RLS policies.

@@ -1,6 +1,6 @@
 {
   "name": "supabase-multitenancy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A SQL-first multi-tenancy and RBAC foundation for Supabase",
   "license": "MIT",
   "author": "supabase-multitenancy contributors",

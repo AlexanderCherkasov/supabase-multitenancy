@@ -9,6 +9,7 @@ from .types import (
     InvitationSummary,
     Membership,
     Permission,
+    Page,
     Role,
     Scope,
 )
@@ -29,9 +30,9 @@ class SupabaseRpcClient(Protocol):
 
 
 class MultitenancyClient:
-    """Synchronous, user-session client for the package's public RPCs in the multitenancy schema."""
+    """Synchronous, user-session client for the package's public RPCs in the api schema."""
 
-    def __init__(self, supabase: Any, *, schema: str = "multitenancy"):
+    def __init__(self, supabase: Any, *, schema: str = "api"):
         self._supabase = supabase.schema(schema) if hasattr(supabase, "schema") and callable(supabase.schema) else supabase
         self._schema = schema
         self.tenants = TenantsApi(self)
@@ -57,13 +58,36 @@ class MultitenancyClient:
         tenant_id: str,
         section: ContextSection,
         *,
-        cursor: Optional[str] = None,
         limit: int = 50,
     ) -> Any:
         return self._rpc(
             "context",
+            {"p_tenant_id": tenant_id, "p_section": section, "p_limit": limit},
+        )
+
+    def context_page(
+        self,
+        tenant_id: str,
+        section: ContextSection,
+        *,
+        cursor: Optional[str] = None,
+        limit: int = 50,
+    ) -> Page:
+        if section == "self":
+            raise ValueError("The self context section is not paginated")
+        result = self._rpc(
+            "context_page",
             {"p_tenant_id": tenant_id, "p_section": section, "p_cursor": cursor, "p_limit": limit},
         )
+        return {"items": result["items"], "next_cursor": result.get("next_cursor", result.get("nextCursor"))}
+
+    @staticmethod
+    def _validate_grants(grants: List[Grant]) -> None:
+        for grant in grants:
+            has_role_id = isinstance(grant.get("role_id"), str) and bool(grant.get("role_id"))
+            has_role_key = isinstance(grant.get("role_key"), str) and bool(grant.get("role_key"))
+            if has_role_id == has_role_key:
+                raise ValueError("Each grant must specify exactly one of role_id or role_key")
 
     def admin(self, tenant_id: str, command: str, payload: Dict[str, Any]) -> Any:
         if command.startswith("role."):
@@ -105,18 +129,24 @@ class PermissionsApi:
     def __init__(self, client: MultitenancyClient): self._client = client
     def list(self, tenant_id: str, *, limit: int = 50) -> List[Permission]:
         return cast(List[Permission], self._client.context(tenant_id, "permissions", limit=limit))
+    def list_page(self, tenant_id: str, *, cursor: Optional[str] = None, limit: int = 50) -> Page:
+        return self._client.context_page(tenant_id, "permissions", cursor=cursor, limit=limit)
 
 
 class RolesApi:
     def __init__(self, client: MultitenancyClient): self._client = client
     def list(self, tenant_id: str, *, limit: int = 50) -> List[Role]:
         return cast(List[Role], self._client.context(tenant_id, "roles", limit=limit))
+    def list_page(self, tenant_id: str, *, cursor: Optional[str] = None, limit: int = 50) -> Page:
+        return self._client.context_page(tenant_id, "roles", cursor=cursor, limit=limit)
 
 
 class ScopesApi:
     def __init__(self, client: MultitenancyClient): self._client = client
     def list(self, tenant_id: str, *, limit: int = 50) -> List[Scope]:
         return cast(List[Scope], self._client.context(tenant_id, "scopes", limit=limit))
+    def list_page(self, tenant_id: str, *, cursor: Optional[str] = None, limit: int = 50) -> Page:
+        return self._client.context_page(tenant_id, "scopes", cursor=cursor, limit=limit)
     def create(self, tenant_id: str, *, kind: str, key: str, name: str, metadata: Optional[Dict[str, Any]] = None) -> Scope:
         return cast(Scope, self._client.admin(tenant_id, "scope.create", {"kind": kind, "key": key, "name": name, "metadata": metadata or {}}))
     def update(self, tenant_id: str, scope_id: str, *, name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> Scope:
@@ -130,7 +160,10 @@ class MembersApi:
     def __init__(self, client: MultitenancyClient): self._client = client
     def list(self, tenant_id: str, *, limit: int = 50) -> List[Membership]:
         return cast(List[Membership], self._client.context(tenant_id, "members", limit=limit))
+    def list_page(self, tenant_id: str, *, cursor: Optional[str] = None, limit: int = 50) -> Page:
+        return self._client.context_page(tenant_id, "members", cursor=cursor, limit=limit)
     def set_grants(self, tenant_id: str, membership_id: str, grants: List[Grant]) -> Dict[str, Any]:
+        self._client._validate_grants(grants)
         return cast(Dict[str, Any], self._client.admin(tenant_id, "member.set_grants", {"membership_id": membership_id, "grants": grants}))
     def suspend(self, tenant_id: str, membership_id: str) -> Dict[str, Any]:
         return cast(Dict[str, Any], self._client.admin(tenant_id, "member.suspend", {"membership_id": membership_id}))
@@ -144,7 +177,10 @@ class InvitationsApi:
     def __init__(self, client: MultitenancyClient): self._client = client
     def list(self, tenant_id: str, *, limit: int = 50) -> List[InvitationSummary]:
         return cast(List[InvitationSummary], self._client.context(tenant_id, "invitations", limit=limit))
+    def list_page(self, tenant_id: str, *, cursor: Optional[str] = None, limit: int = 50) -> Page:
+        return self._client.context_page(tenant_id, "invitations", cursor=cursor, limit=limit)
     def create(self, tenant_id: str, *, email: str, grants: List[Grant]) -> Dict[str, Any]:
+        self._client._validate_grants(grants)
         return cast(Dict[str, Any], self._client.admin(tenant_id, "invitation.create", {"email": email, "grants": grants}))
     def resend(self, tenant_id: str, invitation_id: str) -> Dict[str, Any]:
         return cast(Dict[str, Any], self._client.admin(tenant_id, "invitation.resend", {"invitation_id": invitation_id}))
@@ -160,3 +196,5 @@ class AuditApi:
     def __init__(self, client: MultitenancyClient): self._client = client
     def list(self, tenant_id: str, *, limit: int = 50) -> List[AuditEvent]:
         return cast(List[AuditEvent], self._client.context(tenant_id, "audit", limit=limit))
+    def list_page(self, tenant_id: str, *, cursor: Optional[str] = None, limit: int = 50) -> Page:
+        return self._client.context_page(tenant_id, "audit", cursor=cursor, limit=limit)

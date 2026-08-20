@@ -18,9 +18,9 @@ declare
   v_manager_id uuid;
 begin
   -- Role 1: Task Viewer (read own tasks)
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'task_viewer', 'Task Viewer', 'View own assigned tasks')
-  on conflict (coalesce(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), key)
+  insert into multitenancy.roles (key, name, description)
+  values ('task_viewer', 'Task Viewer', 'View own assigned tasks')
+  on conflict (key)
   do update set name = excluded.name
   returning id into v_viewer_id;
 
@@ -30,9 +30,9 @@ begin
   on conflict (role_id, permission_id) do update set access_level = excluded.access_level;
 
   -- Role 2: Task Editor (read, create, edit own tasks)
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'task_editor', 'Task Editor', 'Create and manage own tasks')
-  on conflict (coalesce(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), key)
+  insert into multitenancy.roles (key, name, description)
+  values ('task_editor', 'Task Editor', 'Create and manage own tasks')
+  on conflict (key)
   do update set name = excluded.name
   returning id into v_editor_id;
 
@@ -42,9 +42,9 @@ begin
   on conflict (role_id, permission_id) do update set access_level = excluded.access_level;
 
   -- Role 3: Task Manager (full control over all tasks in tenant/scope)
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'task_manager', 'Task Manager', 'Manage all tasks and delete')
-  on conflict (coalesce(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), key)
+  insert into multitenancy.roles (key, name, description)
+  values ('task_manager', 'Task Manager', 'Manage all tasks and delete')
+  on conflict (key)
   do update set name = excluded.name
   returning id into v_manager_id;
 

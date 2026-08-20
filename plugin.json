@@ -1,6 +1,6 @@
 {
   "name": "supabase-multitenancy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Expert AI skill for designing multi-tenant schemas, DBA-managed RBAC, and RLS on Supabase",
   "author": "Alexander Cherkasov",
   "skills": [

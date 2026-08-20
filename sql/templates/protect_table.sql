@@ -24,15 +24,15 @@ end $$;
 drop trigger if exists multitenancy_protected_keys_immutable on public.documents;
 create trigger multitenancy_protected_keys_immutable
   before update on public.documents
-  for each row execute function multitenancy.enforce_protected_keys_immutable('tenant_id', 'project_id');
+  for each row execute function api.enforce_protected_keys_immutable('tenant_id', 'project_id');
 
 drop policy if exists "documents select" on public.documents;
 create policy "documents select" on public.documents
   for select to authenticated
   using (
-    (select multitenancy.has_access(tenant_id, 'documents.read', array[project_id], 'all'))
+    (select api.has_access(tenant_id, 'documents.read', array[project_id], 'all'))
     or (
-      (select multitenancy.has_access(tenant_id, 'documents.read', array[project_id], 'own'))
+      (select api.has_access(tenant_id, 'documents.read', array[project_id], 'own'))
       and author_id = (select auth.uid())
     )
   );
@@ -41,9 +41,9 @@ drop policy if exists "documents insert" on public.documents;
 create policy "documents insert" on public.documents
   for insert to authenticated
   with check (
-    (select multitenancy.has_access(tenant_id, 'documents.create', array[project_id], 'all'))
+    (select api.has_access(tenant_id, 'documents.create', array[project_id], 'all'))
     or (
-      (select multitenancy.has_access(tenant_id, 'documents.create', array[project_id], 'own'))
+      (select api.has_access(tenant_id, 'documents.create', array[project_id], 'own'))
       and author_id = (select auth.uid())
     )
   );
@@ -52,16 +52,16 @@ drop policy if exists "documents update" on public.documents;
 create policy "documents update" on public.documents
   for update to authenticated
   using (
-    (select multitenancy.has_access(tenant_id, 'documents.update', array[project_id], 'all'))
+    (select api.has_access(tenant_id, 'documents.update', array[project_id], 'all'))
     or (
-      (select multitenancy.has_access(tenant_id, 'documents.update', array[project_id], 'own'))
+      (select api.has_access(tenant_id, 'documents.update', array[project_id], 'own'))
       and author_id = (select auth.uid())
     )
   )
   with check (
-    (select multitenancy.has_access(tenant_id, 'documents.update', array[project_id], 'all'))
+    (select api.has_access(tenant_id, 'documents.update', array[project_id], 'all'))
     or (
-      (select multitenancy.has_access(tenant_id, 'documents.update', array[project_id], 'own'))
+      (select api.has_access(tenant_id, 'documents.update', array[project_id], 'own'))
       and author_id = (select auth.uid())
     )
   );
@@ -70,9 +70,9 @@ drop policy if exists "documents delete" on public.documents;
 create policy "documents delete" on public.documents
   for delete to authenticated
   using (
-    (select multitenancy.has_access(tenant_id, 'documents.delete', array[project_id], 'all'))
+    (select api.has_access(tenant_id, 'documents.delete', array[project_id], 'all'))
     or (
-      (select multitenancy.has_access(tenant_id, 'documents.delete', array[project_id], 'own'))
+      (select api.has_access(tenant_id, 'documents.delete', array[project_id], 'own'))
       and author_id = (select auth.uid())
     )
   );

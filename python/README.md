@@ -1,6 +1,8 @@
 # supabase-multitenancy
 
-Python client for the SQL-first `supabase-multitenancy` package.
+Python client for the SQL-first `supabase-multitenancy` package. It uses the
+exposed `api` schema by default; private `multitenancy` tables and
+implementation routines are never a client API.
 
 ```python
 from supabase import create_client

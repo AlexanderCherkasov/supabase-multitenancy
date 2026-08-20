@@ -1,5 +1,5 @@
 -- 003_rbac.sql
--- supabase-multitenancy v0.2.0 — RBAC: permissions, roles, access levels, assignments
+-- supabase-multitenancy v0.3.0 — RBAC: permissions, roles, access levels, assignments
 -- Purpose: Global permission catalog + DBA-managed tenant role profiles with scoped assignments.
 -- Dependencies: 002_identities
 
@@ -28,17 +28,18 @@ insert into multitenancy.permissions (key, origin, description) values
 on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------------
--- roles — tenant-local but DBA-managed; no public RPC mutates this table
+-- roles — DBA-managed global catalog. `tenant_id` is NULL for normal global
+-- roles and non-NULL only for exceptional tenant-specific DBA roles.
 -- ---------------------------------------------------------------------------
 create table if not exists multitenancy.roles (
   id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references multitenancy.tenants(id) on delete cascade,
+  tenant_id uuid references multitenancy.tenants(id) on delete cascade,
   key text not null check (key ~ '^[a-z][a-z0-9_]{1,39}$'),
   name text not null check (char_length(name) between 1 and 120),
   description text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(tenant_id, key)
+  unique(key)
 );
 create index if not exists idx_roles_tenant on multitenancy.roles(tenant_id);
 drop trigger if exists trg_roles_touch on multitenancy.roles;
@@ -69,11 +70,16 @@ revoke all on table multitenancy.roles, multitenancy.role_permissions
 -- ---------------------------------------------------------------------------
 create table if not exists multitenancy.role_assignments (
   id uuid primary key default gen_random_uuid(),
-  membership_id uuid not null references multitenancy.memberships(id) on delete cascade,
+  tenant_id uuid not null,
+  membership_id uuid not null,
   role_id uuid not null references multitenancy.roles(id) on delete cascade,
   scope_id uuid, -- nullable = tenant-wide
   created_at timestamptz not null default now(),
-  unique(membership_id, role_id, scope_id)
+  unique(membership_id, role_id, scope_id),
+  foreign key (tenant_id, membership_id)
+    references multitenancy.memberships(tenant_id, id) on delete cascade,
+  foreign key (tenant_id, scope_id)
+    references multitenancy.scopes(tenant_id, id) on delete cascade
 );
 create index if not exists idx_role_assignments_membership on multitenancy.role_assignments(membership_id);
 create index if not exists idx_role_assignments_role on multitenancy.role_assignments(role_id);
@@ -83,18 +89,21 @@ create unique index if not exists uq_role_assignments_tenant_wide
 
 -- Enforce that role, membership, and scope all belong to the same tenant
 create or replace function multitenancy.enforce_assignment_scope_tenant()
-returns trigger language plpgsql as $$
-declare v_tenant uuid; v_scope_tenant uuid;
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_membership_tenant uuid; v_role_tenant uuid; v_scope_tenant uuid;
 begin
-  select tenant_id into v_tenant from multitenancy.memberships where id = new.membership_id;
-  select tenant_id into v_scope_tenant from multitenancy.roles where id = new.role_id;
-  if v_tenant is null or v_scope_tenant is null or v_tenant <> v_scope_tenant then
-    raise exception 'role and membership must belong to same tenant' using errcode='23503';
+  select tenant_id into v_membership_tenant from multitenancy.memberships where id = new.membership_id;
+  select tenant_id into v_role_tenant from multitenancy.roles where id = new.role_id;
+  if v_membership_tenant is null or new.tenant_id <> v_membership_tenant then
+    raise exception 'assignment tenant must match membership tenant' using errcode='23503';
+  end if;
+  if v_role_tenant is not null and v_role_tenant <> new.tenant_id then
+    raise exception 'role is restricted to another tenant' using errcode='23503';
   end if;
   if new.scope_id is not null then
     select tenant_id into v_scope_tenant from multitenancy.scopes where id = new.scope_id;
-    if v_scope_tenant is null or v_scope_tenant <> v_tenant then
-      raise exception 'scope must belong to same tenant as membership' using errcode='23503';
+    if v_scope_tenant is null or v_scope_tenant <> new.tenant_id then
+      raise exception 'scope must belong to assignment tenant' using errcode='23503';
     end if;
   end if;
   return new;

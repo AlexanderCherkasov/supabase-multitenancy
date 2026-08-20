@@ -24,11 +24,11 @@ Use this skill whenever you need to design, generate, or modify multi-tenant sch
 
 ## ⛔ Absolute Guardrails for AI Agents
 
-1. **Schema Encapsulation**: ALL multitenancy tables (`tenants`, `memberships`, `scopes`, `roles`, `invitations`, `audit_events`) and RPCs (`create_tenant`, `can`, `context`, `invitation_preview`, `accept_invitation`, `admin`) belong strictly in schema `multitenancy`. **NEVER place package functions or tables in `public`.**
+1. **Schema Encapsulation**: ALL multitenancy tables and implementation routines belong strictly in private schema `multitenancy`. Client RPCs and RLS helpers are thin wrappers in exposed schema `api`; **NEVER expose `multitenancy` or place package objects in `public`.**
 2. **DBA-Managed Roles**: Roles and permissions are migration-owned data (`insert into multitenancy.permissions`, `insert into multitenancy.roles`). Tenant owners and admins can assign existing roles to members, but **NEVER generate API endpoints or client code that allows tenant admins to create or alter role definitions**.
 3. **No Dynamic SQL in Role Tables**: Never store function names in role table columns. Use the clean contract: role permissions specify `'own'` or `'all'`, and the application RLS policy defines what `'own'` means for each table.
 4. **No Service-Role Bypass in User Routes**: Always execute user queries with the user's authenticated Supabase client (JWT). The database RLS policies enforce tenant isolation automatically.
-5. **Key Immutability**: Always attach the trigger `multitenancy.enforce_protected_keys_immutable()` on scoped business tables to prevent cross-tenant row transfers.
+5. **Key Immutability**: Always attach the trigger `api.enforce_protected_keys_immutable()` on scoped business tables to prevent cross-tenant row transfers.
 
 ---
 
@@ -60,23 +60,23 @@ declare
   v_manager uuid;
 begin
   -- Viewer: own read
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'viewer', 'Viewer', 'Read own records') returning id into v_viewer;
+  insert into multitenancy.roles (key, name, description)
+  values ('viewer', 'Viewer', 'Read own records') returning id into v_viewer;
 
   insert into multitenancy.role_permissions (role_id, permission_id, access_level)
   select v_viewer, id, 'own' from multitenancy.permissions where key = '<resource>.read';
 
   -- Editor: own read, create, update
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'editor', 'Editor', 'Manage own records') returning id into v_editor;
+  insert into multitenancy.roles (key, name, description)
+  values ('editor', 'Editor', 'Manage own records') returning id into v_editor;
 
   insert into multitenancy.role_permissions (role_id, permission_id, access_level)
   select v_editor, id, 'own' from multitenancy.permissions
   where key in ('<resource>.read', '<resource>.create', '<resource>.update');
 
   -- Manager: all access (tenant or scope wide)
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (null, 'manager', 'Manager', 'Full control over resources') returning id into v_manager;
+  insert into multitenancy.roles (key, name, description)
+  values ('manager', 'Manager', 'Full control over resources') returning id into v_manager;
 
   insert into multitenancy.role_permissions (role_id, permission_id, access_level)
   select v_manager, id, 'all' from multitenancy.permissions
@@ -105,7 +105,7 @@ create index idx_<resources>_tenant_scope on public.<resources>(tenant_id, scope
 -- Enforce key immutability on update
 create trigger trg_<resources>_protect
   before update on public.<resources>
-  for each row execute function multitenancy.enforce_protected_keys_immutable('scope_id');
+  for each row execute function api.enforce_protected_keys_immutable('scope_id');
 
 alter table public.<resources> enable row level security;
 ```
@@ -117,7 +117,7 @@ alter table public.<resources> enable row level security;
 create policy "<resources>_select" on public.<resources>
 for select to authenticated
 using (
-  case multitenancy.access_level(tenant_id, '<resource>.read', array[scope_id])
+  case api.access_level(tenant_id, '<resource>.read', array[scope_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
@@ -129,21 +129,21 @@ create policy "<resources>_insert" on public.<resources>
 for insert to authenticated
 with check (
   author_id = auth.uid()
-  and multitenancy.has_access(tenant_id, '<resource>.create', array[scope_id], 'own')
+  and api.has_access(tenant_id, '<resource>.create', array[scope_id], 'own')
 );
 
 -- UPDATE (Edit)
 create policy "<resources>_update" on public.<resources>
 for update to authenticated
 using (
-  case multitenancy.access_level(tenant_id, '<resource>.update', array[scope_id])
+  case api.access_level(tenant_id, '<resource>.update', array[scope_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
   end
 )
 with check (
-  case multitenancy.access_level(tenant_id, '<resource>.update', array[scope_id])
+  case api.access_level(tenant_id, '<resource>.update', array[scope_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
@@ -154,7 +154,7 @@ with check (
 create policy "<resources>_delete" on public.<resources>
 for delete to authenticated
 using (
-  multitenancy.has_access(tenant_id, '<resource>.delete', array[scope_id], 'all')
+  api.has_access(tenant_id, '<resource>.delete', array[scope_id], 'all')
 );
 ```
 

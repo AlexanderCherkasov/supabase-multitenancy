@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_TELEMETRY_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: npm ci
+      - run: supabase start
+      - name: Apply fresh package and E2E fixture
+        shell: bash
+        run: |
+          supabase db reset --no-seed
+          eval "$(supabase status -o env)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f sql/install.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f tests/e2e/fixtures.sql
+      - name: Run pgTAP
+        shell: bash
+        run: |
+          mkdir -p supabase/tests
+          cp tests/pgtap/*.sql supabase/tests/
+          supabase test db --local
+      - run: npm run typecheck
+      - name: Run Python SDK unit tests
+        run: PYTHONPATH=python/src python -m unittest python/tests/test_client.py
+      - name: Build package and run HTTP/Auth/PostgREST E2E
+        shell: bash
+        run: |
+          eval "$(supabase status -o env)"
+          export SUPABASE_URL="$API_URL"
+          export SUPABASE_ANON_KEY="$ANON_KEY"
+          export SUPABASE_DB_URL="$DB_URL"
+          npm run build
+          node --test dist/tests/e2e/live-instance.test.js
+      - if: always()
+        run: supabase stop

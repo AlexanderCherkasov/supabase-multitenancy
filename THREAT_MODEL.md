@@ -19,7 +19,8 @@ Protected assets are tenant business rows, membership and role state, invitation
 | Invitation replay ambiguity | Token hash retained; same-user accept is idempotent; terminal states remain observable |
 | Auth-trigger collision | Package-specific trigger name; consumer triggers are not dropped |
 | Audit loss on user deletion | Actor UUID is retained without an `auth.users` foreign key |
-| Migration tampering | Consumer-vendored immutable migration, reviewed release manifest and source control |
+| Private API bypass | `multitenancy` is not exposed; client grants target only reviewed `api` wrappers |
+| Migration tampering | Consumer-vendored fresh v0.3 baseline, reviewed release manifest and source control |
 
 ## Residual risks
 
@@ -27,4 +28,4 @@ Application predicates can still be incorrect, slow, or intentionally over-broad
 
 ## Explicit non-goals
 
-This package does not provide billing entitlements, organization discovery, hierarchical scopes, policy authoring from untrusted runtime data, token delivery, or protection from a compromised database owner/service-role environment.
+This package does not provide billing entitlements, organization discovery, policy authoring from untrusted runtime data, token delivery, upgrade compatibility with v0.2, or protection from a compromised database owner/service-role environment.

@@ -4,6 +4,7 @@ export const ERROR_CODES = [
   "NOT_FOUND",
   "CONFLICT",
   "INVALID_INPUT",
+  "INVALID_CURSOR",
   "TOKEN_INVALID",
   "TOKEN_EXPIRED",
   "TOKEN_REVOKED",
@@ -38,6 +39,7 @@ export function mapPostgresError(err: { message?: string; code?: string }): Mult
   if (msg.includes("NOT_FOUND") || pgCode === "42704") return new MultitenancyError("NOT_FOUND", msg, err);
   if (msg.includes("CONFLICT") || pgCode === "23505") return new MultitenancyError("CONFLICT", msg, err);
   if (msg.includes("INVALID_INPUT") || pgCode === "22P02") return new MultitenancyError("INVALID_INPUT", msg, err);
+  if (msg.includes("INVALID_CURSOR")) return new MultitenancyError("INVALID_CURSOR", msg, err);
   if (msg.includes("TOKEN_REVOKED")) return new MultitenancyError("TOKEN_REVOKED", msg, err);
   if (msg.includes("TOKEN_EXPIRED")) return new MultitenancyError("TOKEN_EXPIRED", msg, err);
   if (msg.includes("TOKEN_ACCEPTED")) return new MultitenancyError("TOKEN_ACCEPTED", msg, err);

@@ -1,5 +1,5 @@
 -- 002_identities.sql
--- supabase-multitenancy v0.2.0 — Identities: profiles, tenants, scopes, memberships
+-- supabase-multitenancy v0.3.0 — Identities: profiles, tenants, scopes, memberships
 -- Purpose: Tenant and membership roots. auth.users is the sole identity source.
 -- Dependencies: 001_base
 
@@ -87,7 +87,8 @@ create table if not exists multitenancy.memberships (
   status text not null default 'active' check (status in ('active','suspended','removed')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(tenant_id, user_id)
+  unique(tenant_id, user_id),
+  unique(tenant_id, id)
 );
 create index if not exists idx_memberships_tenant on multitenancy.memberships(tenant_id);
 create index if not exists idx_memberships_user on multitenancy.memberships(user_id);

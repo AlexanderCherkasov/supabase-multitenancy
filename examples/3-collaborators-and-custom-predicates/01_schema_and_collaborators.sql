@@ -36,7 +36,7 @@ create index if not exists idx_doc_collab_tenant on public.document_collaborator
 drop trigger if exists trg_documents_protect on public.documents;
 create trigger trg_documents_protect
   before update on public.documents
-  for each row execute function multitenancy.enforce_protected_keys_immutable('project_id');
+  for each row execute function api.enforce_protected_keys_immutable('project_id');
 
 -- Enable Row-Level Security on both tables
 alter table public.documents enable row level security;

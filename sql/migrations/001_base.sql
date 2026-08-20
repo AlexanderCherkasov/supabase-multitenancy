@@ -1,5 +1,5 @@
 -- 001_base.sql
--- supabase-multitenancy v0.2.0 — Base: extensions, schema, helpers, version
+-- supabase-multitenancy v0.3.0 — Base: extensions, schema, helpers, version
 -- Purpose: Create private schema and shared utilities. No business tables.
 -- Apply first. Idempotent.
 
@@ -20,7 +20,7 @@ create table if not exists multitenancy.package_meta (
   installed_at timestamptz not null default now()
 );
 insert into multitenancy.package_meta (id, version)
-values (1, '0.2.0')
+values (1, '0.3.0')
 on conflict (id) do update set version = excluded.version;
 
 -- Global settings (single row, id=1)

@@ -34,15 +34,16 @@ export interface RolePermission {
 export interface Role {
   id: string;
   key: string;
+  tenant_id?: TenantId | null;
   name: string;
   description?: string | null;
   permissions?: RolePermission[] | null;
 }
 
-export interface Grant {
-  role_id: string;
-  scope_id?: string | null;
-}
+export type Grant = (
+  | { role_id: string; role_key?: never }
+  | { role_id?: never; role_key: string }
+) & { scope_id?: string | null };
 
 export interface Membership {
   id: string;
@@ -103,6 +104,11 @@ export interface ContextDataMap {
 }
 
 export type ContextSection = keyof ContextDataMap;
+
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
 
 export type PermissionKey<AppPermission extends string = string> =
   | `multitenancy.${string}`

@@ -7,13 +7,12 @@ insert into multitenancy.permissions (key, description, origin) values
 on conflict (key) do update
 set description = excluded.description, is_deprecated = false;
 
--- DBA-managed role profiles. Apply only as a reviewed database migration.
--- Replace the tenant UUID before applying.
+-- DBA-managed global role profiles. Apply only as a reviewed database migration.
 with inserted as (
-  insert into multitenancy.roles (tenant_id, key, name) values
-    ('00000000-0000-0000-0000-000000000001', 'editor', 'Editor'),
-    ('00000000-0000-0000-0000-000000000001', 'viewer', 'Viewer')
-  on conflict (tenant_id, key) do update set name = excluded.name
+  insert into multitenancy.roles (key, name) values
+    ('editor', 'Editor'),
+    ('viewer', 'Viewer')
+  on conflict (key) do update set name = excluded.name
   returning id, key
 )
 insert into multitenancy.role_permissions (role_id, permission_id, access_level)

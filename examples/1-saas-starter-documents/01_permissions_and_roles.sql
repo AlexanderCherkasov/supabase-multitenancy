@@ -8,35 +8,34 @@ insert into multitenancy.permissions (key, description) values
   ('documents.delete', 'Delete documents (restricted to managers/owners)')
 on conflict (key) do update set description = excluded.description;
 
--- Step 2: Define Tenant Role Profiles with `own` vs `all` Access Levels
+-- Step 2: Define global role profiles with `own` vs `all` Access Levels
 -- Role definitions are migration-owned. Tenant owners can assign roles to members,
 -- but cannot create or elevate roles.
 
 do $$
 declare
-  v_tenant_id uuid; -- Leave NULL for global role templates, or specify tenant_id
   v_role_viewer uuid;
   v_role_editor uuid;
   v_role_manager uuid;
 begin
   -- 1. VIEWER: Can read own documents
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (v_tenant_id, 'viewer', 'Document Viewer', 'Can view only own documents')
-  on conflict (coalesce(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), key)
+  insert into multitenancy.roles (key, name, description)
+  values ('viewer', 'Document Viewer', 'Can view only own documents')
+  on conflict (key)
   do update set name = excluded.name, description = excluded.description
   returning id into v_role_viewer;
 
   -- 2. EDITOR: Can read own, create, and update own documents
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (v_tenant_id, 'editor', 'Document Editor', 'Can create and edit own documents')
-  on conflict (coalesce(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), key)
+  insert into multitenancy.roles (key, name, description)
+  values ('editor', 'Document Editor', 'Can create and edit own documents')
+  on conflict (key)
   do update set name = excluded.name, description = excluded.description
   returning id into v_role_editor;
 
   -- 3. MANAGER: Can read all, create, update all, and delete all documents in tenant/scope
-  insert into multitenancy.roles (tenant_id, key, name, description)
-  values (v_tenant_id, 'manager', 'Project Manager', 'Can manage all documents and delete')
-  on conflict (coalesce(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), key)
+  insert into multitenancy.roles (key, name, description)
+  values ('manager', 'Project Manager', 'Can manage all documents and delete')
+  on conflict (key)
   do update set name = excluded.name, description = excluded.description
   returning id into v_role_manager;
 

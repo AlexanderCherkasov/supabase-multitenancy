@@ -25,7 +25,7 @@ create index if not exists idx_documents_author on public.documents(author_id);
 drop trigger if exists trg_documents_protected_keys on public.documents;
 create trigger trg_documents_protected_keys
   before update on public.documents
-  for each row execute function multitenancy.enforce_protected_keys_immutable('project_id');
+  for each row execute function api.enforce_protected_keys_immutable('project_id');
 
 -- Enable RLS
 alter table public.documents enable row level security;
@@ -42,7 +42,7 @@ on public.documents
 for select
 to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'documents.read', array[project_id])
+  case api.access_level(tenant_id, 'documents.read', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
@@ -61,7 +61,7 @@ for insert
 to authenticated
 with check (
   author_id = auth.uid()
-  and multitenancy.has_access(tenant_id, 'documents.create', array[project_id], 'own')
+  and api.has_access(tenant_id, 'documents.create', array[project_id], 'own')
 );
 
 -- ----------------------------------------------------------------------------
@@ -75,14 +75,14 @@ on public.documents
 for update
 to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'documents.update', array[project_id])
+  case api.access_level(tenant_id, 'documents.update', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
   end
 )
 with check (
-  case multitenancy.access_level(tenant_id, 'documents.update', array[project_id])
+  case api.access_level(tenant_id, 'documents.update', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
@@ -99,5 +99,5 @@ on public.documents
 for delete
 to authenticated
 using (
-  multitenancy.has_access(tenant_id, 'documents.delete', array[project_id], 'all')
+  api.has_access(tenant_id, 'documents.delete', array[project_id], 'all')
 );

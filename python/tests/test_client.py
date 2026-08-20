@@ -38,6 +38,22 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(transport.calls[0][0], "admin")
         self.assertEqual(transport.calls[0][1]["p_command"], "member.set_grants")
 
+    def test_list_page_uses_context_page(self):
+        transport = FakeSupabase(lambda _fn, _params: {"items": [{"key": "editor"}], "next_cursor": "next"})
+        client = MultitenancyClient(transport)
+        self.assertEqual(client.roles.list_page("t1", cursor="cursor", limit=10), {
+            "items": [{"key": "editor"}], "next_cursor": "next"
+        })
+        self.assertEqual(transport.calls[0], ("context_page", {
+            "p_tenant_id": "t1", "p_section": "roles", "p_cursor": "cursor", "p_limit": 10
+        }))
+
+    def test_grant_references_require_exactly_one_role_reference(self):
+        transport = FakeSupabase(lambda _fn, _params: {})
+        client = MultitenancyClient(transport)
+        with self.assertRaises(ValueError):
+            client.members.set_grants("t1", "m1", [{"role_id": "r1", "role_key": "editor"}])
+
     def test_role_commands_fail_before_network(self):
         transport = FakeSupabase(lambda _fn, _params: {})
         client = MultitenancyClient(transport)

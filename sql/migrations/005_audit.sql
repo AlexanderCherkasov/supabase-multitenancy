@@ -1,5 +1,5 @@
 -- 005_audit.sql
--- supabase-multitenancy v0.2.0 — Audit log (append-only)
+-- supabase-multitenancy v0.3.0 — Audit log (append-only)
 -- Purpose: Administrative command history. Never stores raw invitation tokens.
 -- Dependencies: 002_identities
 

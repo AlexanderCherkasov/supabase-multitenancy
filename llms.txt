@@ -11,7 +11,7 @@
 
 ## Key Concepts
 
-- **Schema Isolation**: All package routines and tables reside strictly inside the `multitenancy` schema.
+- **Schema Isolation**: Tables and implementation remain private in `multitenancy`; client RPCs and RLS helpers are exposed only through `api`.
 - **Access Levels**: Permissions are resolved to `none`, `own`, or `all`. The meaning of `own` is defined in application RLS policies.
 - **Anti-Escalation**: Delegated admins cannot assign roles with permissions higher than they hold.
 - **SQL Templates**: Located in `sql/templates/` for permissions, roles, table protection, and global settings.

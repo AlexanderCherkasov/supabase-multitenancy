@@ -36,14 +36,28 @@ class RolePermission(TypedDict):
 class Role(TypedDict, total=False):
     id: str
     key: str
+    tenant_id: Optional[str]
     name: str
     description: Optional[str]
     permissions: Optional[List[RolePermission]]
 
 
-class Grant(TypedDict, total=False):
+class RoleIdGrant(TypedDict, total=False):
     role_id: str
     scope_id: Optional[str]
+
+
+class RoleKeyGrant(TypedDict, total=False):
+    role_key: str
+    scope_id: Optional[str]
+
+
+Grant = Union[RoleIdGrant, RoleKeyGrant]
+
+
+class Page(TypedDict):
+    items: List[Any]
+    next_cursor: Optional[str]
 
 
 class Membership(TypedDict, total=False):

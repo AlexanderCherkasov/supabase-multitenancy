@@ -1,51 +1,86 @@
 {
   "package": "supabase-multitenancy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "migrations": [
     {
-      "version": "0.2.0",
+      "version": "0.3.0",
       "file": "migrations/001_base.sql",
-      "checksum": "6aab69d96ada2225d31fcda141ff1d7e71bde3bbf8ebd0042b59950aa95f2e91"
+      "checksum": "2e9a7ca33c948c288f44011bf444c19cc5025ac7eb93bade8c85e1a55bc29bbf"
     },
     {
-      "version": "0.2.0",
+      "version": "0.3.0",
       "file": "migrations/002_identities.sql",
-      "checksum": "79ebbe4a5f47897c7d1f8915f1efbde09768ad14aa35d4c3c151af038cd8eb90"
+      "checksum": "a383579ed5eec6a10442355d1f5d9dc56db7c265060ccf945f4023839a24388d"
     },
     {
-      "version": "0.2.0",
+      "version": "0.3.0",
       "file": "migrations/003_rbac.sql",
-      "checksum": "dbda9c8cffbe0179596f230c89ff2087ea2f572c8eeacb5cae75861a85103366"
+      "checksum": "3c7e290490e7b6caf732ede7b936524d01ae23f767c3bd0bcfdfa700e66b7ebf"
     },
     {
-      "version": "0.2.0",
+      "version": "0.3.0",
       "file": "migrations/004_invitations.sql",
-      "checksum": "b72852c80677390df7f5354fe451163de795265bb51d4e682cf89cc4a1326fce"
+      "checksum": "d1ca90b1260c59bc1779bb3e7bae08fa847a96a112297bfad94f75c3573718ae"
     },
     {
-      "version": "0.2.0",
+      "version": "0.3.0",
       "file": "migrations/005_audit.sql",
-      "checksum": "e18bda45af278e16804d7cb4ceed445d5ef146f1508221113b39da376cc9c528"
+      "checksum": "6d5eec8e2444f8845a51d060774fd4c78304a0bbd8813c7246721496e5e2ae53"
     },
     {
-      "version": "0.2.0",
+      "version": "0.3.0",
       "file": "migrations/006_authorize.sql",
-      "checksum": "ab5f9110a13b6466a85cb7fd8d3cec3540b1bbb8a82a8f1e6ea5503e5dbf03dd"
+      "checksum": "57ff50949cd93a69f7458ef0ca4963193b4815f825717067acad4ed048595278"
     },
     {
-      "version": "0.2.0",
-      "file": "migrations/007_rpc_core.sql",
-      "checksum": "66683b58cf0a40a59be23c3ce08e320742e538201e7704a51242e759a60a4654"
+      "version": "0.3.0",
+      "file": "migrations/007_rpc_tenant.sql",
+      "checksum": "d4f5f2aecec7cc9554205f2357a575b40890da2761996b54425ae44f09b7fcd1"
     },
     {
-      "version": "0.2.0",
-      "file": "migrations/008_rpc_admin.sql",
-      "checksum": "e6cb836cde18528e901444a36356a2ca17d187aacdfd36c06df4004c4158b18b"
+      "version": "0.3.0",
+      "file": "migrations/008_rpc_cursor.sql",
+      "checksum": "50577402b5bf8fd8177ee585ade4627f9af27f291ff4ab04809e9b223a42522c"
     },
     {
-      "version": "0.2.0",
-      "file": "migrations/009_access_level_contract.sql",
-      "checksum": "deb963a1a30b395f04da8a5e679623657a71a85db14939986a8a14bec1b6ba37"
+      "version": "0.3.0",
+      "file": "migrations/009_rpc_context.sql",
+      "checksum": "337e0fdf145d365b32613adf55b96be509c93823f7c31d2c15bca229c700293a"
+    },
+    {
+      "version": "0.3.0",
+      "file": "migrations/010_rpc_invitations.sql",
+      "checksum": "6f0425e3d33cc35fb4fff8780df3bda69dda3907d4772dcd58ccdb5eb4acfb56"
+    },
+    {
+      "version": "0.3.0",
+      "file": "migrations/011_admin_tenant.sql",
+      "checksum": "edc931c7795a445277f70eeb356ddee580541113a04217b36ccea29216211348"
+    },
+    {
+      "version": "0.3.0",
+      "file": "migrations/012_admin_scope.sql",
+      "checksum": "0ed878fc8398d1b28c6d7bc1b2c74b9b99dd302039eeebf25adaa60040cbe26d"
+    },
+    {
+      "version": "0.3.0",
+      "file": "migrations/013_admin_member.sql",
+      "checksum": "8152c059e56e5695da9d5ff60d1dd454624d91cbc821fac315c5a4eb534a2695"
+    },
+    {
+      "version": "0.3.0",
+      "file": "migrations/014_admin_invitation.sql",
+      "checksum": "796581b01e09224da3ad670d40bd8947411983b7645570a59c69470e205e07bc"
+    },
+    {
+      "version": "0.3.0",
+      "file": "migrations/015_admin_router.sql",
+      "checksum": "8641b0399216ceca8befedb3831ecc20340502e42814dba79eb0e59295dfe569"
+    },
+    {
+      "version": "0.3.0",
+      "file": "migrations/016_api_boundary.sql",
+      "checksum": "f891f64e85c68c8bdf0669d2a2d541549acb7629e62a0662458a213fae3032ec"
     }
   ]
 }

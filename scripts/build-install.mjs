@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,5 +9,19 @@ const files = readdirSync(migrationsDir).filter((file) => /^\d+_.+\.sql$/.test(f
 const body = files.map((file) => `-- BEGIN ${file}\n${readFileSync(join(migrationsDir, file), "utf8").trim()}\n-- END ${file}`).join("\n\n");
 writeFileSync(
   join(packageRoot, "sql", "install.sql"),
-  `-- Generated release artifact. Do not edit; edit sql/migrations instead.\n-- supabase-multitenancy v0.2.0\n\n${body}\n`,
+  `-- Generated release artifact. Do not edit; edit sql/migrations instead.\n-- supabase-multitenancy v0.3.0\n\n${body}\n`,
 );
+
+const manifest = {
+  package: "supabase-multitenancy",
+  version: "0.3.0",
+  migrations: files.map((file) => {
+    const content = readFileSync(join(migrationsDir, file), "utf8");
+    return {
+      version: "0.3.0",
+      file: `migrations/${file}`,
+      checksum: createHash("sha256").update(content).digest("hex"),
+    };
+  }),
+};
+writeFileSync(join(packageRoot, "sql", "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");

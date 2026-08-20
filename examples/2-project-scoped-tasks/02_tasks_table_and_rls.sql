@@ -27,7 +27,7 @@ create index if not exists idx_tasks_tenant_author on public.tasks(tenant_id, au
 drop trigger if exists trg_tasks_protect on public.tasks;
 create trigger trg_tasks_protect
   before update on public.tasks
-  for each row execute function multitenancy.enforce_protected_keys_immutable('project_id');
+  for each row execute function api.enforce_protected_keys_immutable('project_id');
 
 -- Enable Row-Level Security
 alter table public.tasks enable row level security;
@@ -44,7 +44,7 @@ on public.tasks
 for select
 to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'tasks.read', array[project_id])
+  case api.access_level(tenant_id, 'tasks.read', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
@@ -63,7 +63,7 @@ for insert
 to authenticated
 with check (
   author_id = auth.uid()
-  and multitenancy.has_access(tenant_id, 'tasks.create', array[project_id], 'own')
+  and api.has_access(tenant_id, 'tasks.create', array[project_id], 'own')
 );
 
 -- ----------------------------------------------------------------------------
@@ -77,14 +77,14 @@ on public.tasks
 for update
 to authenticated
 using (
-  case multitenancy.access_level(tenant_id, 'tasks.update', array[project_id])
+  case api.access_level(tenant_id, 'tasks.update', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
   end
 )
 with check (
-  case multitenancy.access_level(tenant_id, 'tasks.update', array[project_id])
+  case api.access_level(tenant_id, 'tasks.update', array[project_id])
     when 'all' then true
     when 'own' then author_id = auth.uid()
     else false
@@ -101,5 +101,5 @@ on public.tasks
 for delete
 to authenticated
 using (
-  multitenancy.has_access(tenant_id, 'tasks.delete', array[project_id], 'all')
+  api.has_access(tenant_id, 'tasks.delete', array[project_id], 'all')
 );

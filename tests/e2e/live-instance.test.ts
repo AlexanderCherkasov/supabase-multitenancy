@@ -1,594 +1,357 @@
+/**
+ * Real local-stack HTTP/Auth/PostgREST tests.
+ *
+ * All user behaviour below uses an authenticated Supabase client and `api`.
+ * The only direct database operation is a DBA migration-style insert of the
+ * exceptional tenant-specific role after its tenant exists; there is no
+ * service-role client, JWT GUC, or linked-project emulation in this suite.
+ */
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
-import { unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { createMultitenancyClient, MultitenancyError } from "../../src/index.js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const url = process.env.SUPABASE_URL;
+const anonKey = process.env.SUPABASE_ANON_KEY;
+const dbUrl = process.env.SUPABASE_DB_URL;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.log("Skipping live instance E2E tests: SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY are not set in environment.");
-  process.exit(0);
-}
+if (!url || !anonKey || !dbUrl) {
+  test("local HTTP/Auth/PostgREST E2E (environment unavailable)", { skip: true }, () => {});
+} else {
+  const runId = Math.random().toString(36).slice(2, 10);
+  const password = `E2e!${runId}Password9`;
 
-const runId = Math.random().toString(36).substring(2, 8);
-const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+  type User = { id: string; email: string; token: string; client: SupabaseClient };
+  type Scope = { id: string; key: string };
+  type Role = { id: string; key: string; tenant_id: string | null };
+  type Member = { id: string; user_id: string; status: string; grants?: Array<{ role_id: string }> };
 
-function runDbaSql(sql: string, retries = 3): string {
-  const tmpFile = join(tmpdir(), `query_${Date.now()}_${Math.random().toString(36).substring(2)}.sql`);
-  writeFileSync(tmpFile, sql, "utf8");
-  try {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        return execSync(`supabase db query --linked --file "${tmpFile}"`, { stdio: "pipe", encoding: "utf8" });
-      } catch (err: unknown) {
-        const msg = String(err);
-        if (attempt < retries && (msg.includes("502") || msg.includes("503") || msg.includes("Bad gateway"))) {
-          const waitMs = attempt * 1000;
-          execSync(`sleep ${waitMs / 1000}`);
-          continue;
-        }
-        throw err;
-      }
-    }
-    throw new Error("runDbaSql failed after retries");
-  } finally {
-    try {
-      unlinkSync(tmpFile);
-    } catch {
-      // ignore
-    }
-  }
-}
-
-function runUserRpc(userId: string | null, fnName: string, params: Record<string, unknown>): unknown {
-  const paramList: string[] = [];
-  if (fnName === "create_tenant") {
-    paramList.push(`'${params.p_slug}'`, `'${params.p_name}'`);
-  } else if (fnName === "can") {
-    const scopeParam = params.p_scope_ids
-      ? `array[${(params.p_scope_ids as string[]).map((s) => `'${s}'::uuid`).join(",")}]`
-      : "null::uuid[]";
-    paramList.push(`'${params.p_tenant_id}'::uuid`, `'${params.p_permission}'`, scopeParam);
-  } else if (fnName === "context") {
-    const cursor = params.p_cursor ? `'${params.p_cursor}'` : "null";
-    paramList.push(`'${params.p_tenant_id}'::uuid`, `'${params.p_section}'`, cursor, `${params.p_limit || 50}`);
-  } else if (fnName === "invitation_preview") {
-    paramList.push(`'${params.p_token}'`);
-  } else if (fnName === "accept_invitation") {
-    paramList.push(`'${params.p_token}'`);
-  } else if (fnName === "admin") {
-    const payloadJson = JSON.stringify(params.p_payload || {}).replace(/'/g, "''");
-    paramList.push(`'${params.p_tenant_id}'::uuid`, `'${params.p_command}'`, `'${payloadJson}'::jsonb`);
+  function api(client: SupabaseClient) {
+    return client.schema("api");
   }
 
-  const roleSetting = userId ? "authenticated" : "anon";
-  const userIdVal = userId || "";
-
-  const sql = `
-    select
-      set_config('request.jwt.claim.sub', '${userIdVal}', true),
-      set_config('request.jwt.claim.role', '${roleSetting}', true),
-      multitenancy.${fnName}(${paramList.join(",")}) as result;
-  `.trim();
-
-  try {
-    const out = runDbaSql(sql);
-    const parsed = JSON.parse(out);
-    const rawResult = parsed.rows?.[0]?.result;
-    return typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
-  } catch (err: unknown) {
-    const errorObj = err as { message?: string; stdout?: string | Buffer; stderr?: string | Buffer };
-    const stdoutStr = errorObj.stdout ? String(errorObj.stdout) : "";
-    const stderrStr = errorObj.stderr ? String(errorObj.stderr) : "";
-    const msg = `${errorObj.message || ""} ${stdoutStr} ${stderrStr}`;
-    if (msg.includes("ROLE_ESCALATION")) {
-      throw new MultitenancyError("ROLE_ESCALATION", msg);
-    }
-    if (msg.includes("EMAIL_MISMATCH")) {
-      throw new MultitenancyError("EMAIL_MISMATCH", msg);
-    }
-    if (msg.includes("42501") || msg.includes("FORBIDDEN")) {
-      throw new MultitenancyError("FORBIDDEN", msg);
-    }
-    if (msg.includes("23505") || msg.includes("CONFLICT")) {
-      throw new MultitenancyError("CONFLICT", msg);
-    }
-    if (msg.includes("22P02") || msg.includes("INVALID_INPUT")) {
-      throw new MultitenancyError("INVALID_INPUT", msg);
-    }
-    if (msg.includes("TOKEN_REVOKED")) {
-      throw new MultitenancyError("TOKEN_REVOKED", msg);
-    }
-    if (msg.includes("TOKEN_EXPIRED")) {
-      throw new MultitenancyError("TOKEN_EXPIRED", msg);
-    }
-    if (msg.includes("TOKEN_ACCEPTED")) {
-      throw new MultitenancyError("TOKEN_ACCEPTED", msg);
-    }
-    if (msg.includes("28000") || msg.includes("TOKEN_INVALID")) {
-      throw new MultitenancyError("TOKEN_INVALID", msg);
-    }
-    if (msg.includes("42704") || msg.includes("NOT_FOUND")) {
-      throw new MultitenancyError("NOT_FOUND", msg);
-    }
-    throw new MultitenancyError("UNKNOWN", msg);
-  }
-}
-
-function createUserMultitenancyClient(client: SupabaseClient, userId: string | null) {
-  const fakeClient = {
-    async rpc(fn: string, params: Record<string, unknown>) {
-      try {
-        const data = runUserRpc(userId, fn, params);
-        return { data, error: null };
-      } catch (error) {
-        return { data: null, error };
-      }
-    },
-    schema(_s: string) {
-      return this;
-    },
-  } as unknown as SupabaseClient;
-
-  return createMultitenancyClient<"documents.read" | "documents.create" | "documents.update" | "documents.delete">(
-    fakeClient
-  );
-}
-
-interface TestUser {
-  id: string;
-  email: string;
-  password: string;
-  client: SupabaseClient;
-  mt: ReturnType<typeof createUserMultitenancyClient>;
-}
-
-async function createAndSignInUser(label: string): Promise<TestUser> {
-  const email = `test-${label}-${runId}@example.com`;
-  const password = `TestPass!${runId}99`;
-
-  const { data: created, error: createError } = await adminClient.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { display_name: `User ${label}` },
-  });
-  if (createError || !created.user) {
-    throw new Error(`Failed to create user ${email}: ${createError?.message}`);
+  async function createUser(label: string): Promise<User> {
+    const email = `e2e-${label}-${runId}@example.test`;
+    const client = createClient(url!, anonKey!, { auth: { persistSession: false } });
+    const signedUp = await client.auth.signUp({ email, password });
+    assert.ifError(signedUp.error);
+    assert.ok(signedUp.data.user, "local Auth created a user");
+    assert.ok(signedUp.data.session, "local Auth returned an authenticated session");
+    return { id: signedUp.data.user.id, email, token: signedUp.data.session.access_token, client };
   }
 
-  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { error: signInError } = await client.auth.signInWithPassword({ email, password });
-  if (signInError) {
-    throw new Error(`Failed to sign in ${email}: ${signInError.message}`);
+  async function login(email: string): Promise<SupabaseClient> {
+    const client = createClient(url!, anonKey!, { auth: { persistSession: false } });
+    const result = await client.auth.signInWithPassword({ email, password });
+    assert.ifError(result.error);
+    assert.ok(result.data.session, "second authenticated client has a session");
+    return client;
   }
 
-  const mt = createUserMultitenancyClient(client, created.user.id);
-  return { id: created.user.id, email, password, client, mt };
-}
+  async function rpc<T>(client: SupabaseClient, fn: string, args: Record<string, unknown>): Promise<T> {
+    const result = await api(client).rpc(fn, args);
+    if (result.error) throw result.error;
+    const envelope = result.data as { api_version?: number; data?: T } | null;
+    assert.equal(envelope?.api_version, 1, `${fn} returns the API envelope`);
+    return envelope?.data as T;
+  }
 
-test("Live Supabase E2E Test Suite (PostgREST + Auth + multitenancy Schema RPC + RLS)", async (t) => {
-  let ownerA: TestUser;
-  let managerA: TestUser;
-  let memberA: TestUser;
-  let userB: TestUser;
+  async function rpcFailure(client: SupabaseClient, fn: string, args: Record<string, unknown>) {
+    const result = await api(client).rpc(fn, args);
+    assert.ok(result.error, `${fn} must be denied`);
+    return result.error;
+  }
 
-  let tenantAId: string;
-  let tenantBId: string;
-  let scope1Id: string;
-  let scope2Id: string;
-  let editorRoleId: string;
-  let managerRoleId: string;
-
-  await t.test("1. Provision test users via Supabase Auth", async () => {
-    ownerA = await createAndSignInUser("owner-a");
-    managerA = await createAndSignInUser("manager-a");
-    memberA = await createAndSignInUser("member-a");
-    userB = await createAndSignInUser("user-b");
-
-    assert.ok(ownerA.id, "Owner A created");
-    assert.ok(managerA.id, "Manager A created");
-    assert.ok(memberA.id, "Member A created");
-    assert.ok(userB.id, "User B created");
-  });
-
-  await t.test("2. Tenant creation (multitenancy.create_tenant) and validation", async () => {
-    const slugA = `tenant-a-${runId}`;
-    const slugB = `tenant-b-${runId}`;
-
-    const createdA = await ownerA.mt.createTenant({ slug: slugA, name: "Tenant A Org" });
-    tenantAId = createdA.tenant_id;
-    assert.equal(createdA.slug, slugA);
-    assert.equal(createdA.name, "Tenant A Org");
-
-    const createdB = await userB.mt.createTenant({ slug: slugB, name: "Tenant B Org" });
-    tenantBId = createdB.tenant_id;
-    assert.ok(tenantBId);
-
-    // Conflict test: duplicate slug
-    await assert.rejects(
-      async () => ownerA.mt.createTenant({ slug: slugA, name: "Duplicate" }),
-      (err: unknown) => err instanceof MultitenancyError && err.code === "CONFLICT"
-    );
-
-    // Invalid slug pattern test
-    await assert.rejects(
-      async () => ownerA.mt.createTenant({ slug: "INVALID SLUG!", name: "Bad Slug" }),
-      (err: unknown) => err instanceof MultitenancyError && err.code === "INVALID_INPUT"
-    );
-  });
-
-  await t.test("3. Seed DBA-managed role profiles for Tenant A in multitenancy schema", async () => {
-    // Verify client/RPC role mutation is blocked (roles are DBA-managed)
-    await assert.rejects(
-      async () => ownerA.mt.admin(tenantAId, { command: "role.create" as never, payload: {} }),
-      (err: unknown) => err instanceof MultitenancyError && err.code === "FORBIDDEN"
-    );
-
-    // Seed roles using DBA SQL migration
-    runDbaSql(`
-      do $$
-      declare
-        v_tid uuid := '${tenantAId}'::uuid;
-        v_editor_id uuid;
-        v_manager_id uuid;
-      begin
+  function dbaInsertTenantRole(tenantId: string, roleKey: string): string {
+    assert.match(tenantId, /^[0-9a-f-]{36}$/i);
+    assert.match(roleKey, /^[a-z][a-z0-9_]{1,39}$/);
+    const sql = `
+      with created_role as (
         insert into multitenancy.roles (tenant_id, key, name, description)
-        values (v_tid, 'editor', 'Editor', 'Can edit owned documents')
-        on conflict (tenant_id, key) do update set name = excluded.name
-        returning id into v_editor_id;
-
+        values ('${tenantId}'::uuid, '${roleKey}', 'E2E tenant reader', 'DBA-only tenant-specific role')
+        returning id
+      ), granted_permission as (
         insert into multitenancy.role_permissions (role_id, permission_id, access_level)
-        select v_editor_id, p.id, grants.access_level
-        from (values
-          ('documents.read', 'all'),
-          ('documents.create', 'own'),
-          ('documents.update', 'own'),
-          ('documents.delete', 'own')
-        ) as grants(permission_key, access_level)
-        join multitenancy.permissions p on p.key = grants.permission_key
-        on conflict (role_id, permission_id) do update set access_level = excluded.access_level;
+        select created_role.id, permissions.id, 'all'
+        from created_role
+        join multitenancy.permissions as permissions on permissions.key = 'documents.read'
+      )
+      select id from created_role;
+    `;
+    return execFileSync("psql", [dbUrl!, "-X", "-v", "ON_ERROR_STOP=1", "-At", "-c", sql], {
+      encoding: "utf8",
+    }).trim();
+  }
 
-        insert into multitenancy.roles (tenant_id, key, name, description)
-        values (v_tid, 'manager', 'Manager', 'Can manage members and scopes')
-        on conflict (tenant_id, key) do update set name = excluded.name
-        returning id into v_manager_id;
+  function memberFor(members: Member[], userId: string): Member {
+    const member = members.find((candidate) => candidate.user_id === userId);
+    assert.ok(member, `membership exists for ${userId}`);
+    return member;
+  }
 
-        insert into multitenancy.role_permissions (role_id, permission_id, access_level)
-        select v_manager_id, p.id, grants.access_level
-        from (values
-          ('multitenancy.members.read', 'all'),
-          ('multitenancy.members.manage', 'all'),
-          ('multitenancy.members.invite', 'all'),
-          ('multitenancy.scopes.manage', 'all'),
-          ('multitenancy.audit.read', 'all'),
-          ('documents.read', 'all')
-        ) as grants(permission_key, access_level)
-        join multitenancy.permissions p on p.key = grants.permission_key
-        on conflict (role_id, permission_id) do update set access_level = excluded.access_level;
-      end$$;
-    `);
+  async function members(owner: User, tenantId: string): Promise<Member[]> {
+    return rpc<Member[]>(owner.client, "context", { p_tenant_id: tenantId, p_section: "members", p_limit: 100 });
+  }
 
-    const rolesContext = await ownerA.mt.roles.list(tenantAId);
-    assert.equal(rolesContext.length, 2);
-    const editorRole = rolesContext.find((r) => r.key === "editor");
-    const managerRole = rolesContext.find((r) => r.key === "manager");
-    assert.ok(editorRole);
-    assert.ok(managerRole);
-    editorRoleId = editorRole.id;
-    managerRoleId = managerRole.id;
-  });
-
-  await t.test("4. Scope management (scope.create, scope.update, scope.delete)", async () => {
-    const s1 = await ownerA.mt.scopes.create(tenantAId, {
-      kind: "project",
-      key: `frontend-${runId}`,
-      name: "Frontend App",
-      metadata: { env: "production" },
+  async function inviteAndAccept(
+    owner: User,
+    recipient: User,
+    tenantId: string,
+    grants: Array<Record<string, string | null>>,
+  ): Promise<{ membership_id: string }> {
+    const invitation = await rpc<{ token: string }>(owner.client, "admin", {
+      p_tenant_id: tenantId,
+      p_command: "invitation.create",
+      p_payload: { email: recipient.email, grants },
     });
-    scope1Id = s1.id;
-    assert.equal(s1.key, `frontend-${runId}`);
+    return rpc(recipient.client, "accept_invitation", { p_token: invitation.token });
+  }
 
-    const s2 = await ownerA.mt.scopes.create(tenantAId, {
-      kind: "project",
-      key: `backend-${runId}`,
-      name: "Backend App",
+  test("v0.3 local HTTP/Auth/PostgREST authorization gate", async (t) => {
+    const owner = await createUser("owner");
+    const writer = await createUser("writer");
+    const tenantReader = await createUser("tenant-reader");
+    const delegatedAdmin = await createUser("delegated-admin");
+    const concurrentInvitee = await createUser("concurrent-invitee");
+    const revokedInvitee = await createUser("revoked-invitee");
+    const outsider = await createUser("outsider");
+
+    const tenant = await rpc<{ tenant_id: string }>(owner.client, "create_tenant", {
+      p_slug: `e2e-${runId}`, p_name: "HTTP E2E Tenant",
     });
-    scope2Id = s2.id;
-    assert.ok(scope2Id);
-
-    const updated = await ownerA.mt.scopes.update(tenantAId, scope1Id, {
-      name: "Frontend Web Application",
+    const tenantId = tenant.tenant_id;
+    const otherTenant = await rpc<{ tenant_id: string }>(outsider.client, "create_tenant", {
+      p_slug: `e2e-other-${runId}`, p_name: "Other HTTP E2E Tenant",
     });
-    assert.equal(updated.name, "Frontend Web Application");
+    const otherTenantId = otherTenant.tenant_id;
 
-    const scopesList = await ownerA.mt.scopes.list(tenantAId);
-    assert.equal(scopesList.length, 2);
+    const tenantRoleKey = `e2e_tenant_${runId}`;
+    const tenantRoleId = dbaInsertTenantRole(tenantId, tenantRoleKey);
+    const foreignTenantRoleKey = `e2e_other_${runId}`;
+    const foreignTenantRoleId = dbaInsertTenantRole(otherTenantId, foreignTenantRoleKey);
+    assert.match(tenantRoleId, /^[0-9a-f-]{36}$/i, "DBA role seed returned an id");
+    assert.match(foreignTenantRoleId, /^[0-9a-f-]{36}$/i, "foreign DBA role seed returned an id");
 
-    // Cross-tenant outsider attempting to create scope on Tenant A
-    await assert.rejects(
-      async () =>
-        userB.mt.scopes.create(tenantAId, { kind: "project", key: "hacked", name: "Hacked" }),
-      (err: unknown) => err instanceof MultitenancyError && err.code === "FORBIDDEN"
-    );
-  });
+    const scopeOne = await rpc<Scope>(owner.client, "admin", {
+      p_tenant_id: tenantId, p_command: "scope.create",
+      p_payload: { kind: "project", key: "one", name: "Project One" },
+    });
+    const scopeTwo = await rpc<Scope>(owner.client, "admin", {
+      p_tenant_id: tenantId, p_command: "scope.create",
+      p_payload: { kind: "project", key: "two", name: "Project Two" },
+    });
+    const foreignScope = await rpc<Scope>(outsider.client, "admin", {
+      p_tenant_id: otherTenantId, p_command: "scope.create",
+      p_payload: { kind: "project", key: "foreign", name: "Foreign Project" },
+    });
 
-  await t.test(
-    "5. Invitations lifecycle (create, preview as anon, accept, replay, revoke)",
-    async () => {
-      // Owner A invites managerA with manager role
-      const inv = await ownerA.mt.invitations.create(tenantAId, {
-        email: managerA.email,
-        grants: [{ role_id: managerRoleId }],
+    await t.test("only exposed api accepts browser RPCs", async () => {
+      const privateResponse = await fetch(`${url}/rest/v1/rpc/create_tenant`, {
+        method: "POST",
+        headers: {
+          apikey: anonKey!, Authorization: `Bearer ${owner.token}`,
+          "Content-Profile": "multitenancy", "content-type": "application/json",
+        },
+        body: JSON.stringify({ p_slug: `private-${runId}`, p_name: "Must not exist" }),
       });
-      assert.ok(inv.invitation_id);
-      assert.ok(inv.token);
+      assert.equal(privateResponse.ok, false, "PostgREST does not expose multitenancy");
+      const privateRpc = await owner.client.schema("multitenancy").rpc("create_tenant", {
+        p_slug: `private-rpc-${runId}`, p_name: "Must not exist",
+      });
+      assert.ok(privateRpc.error, "authenticated client cannot invoke a private RPC");
+    });
 
-      // Anonymous preview
-      const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      const anonMt = createUserMultitenancyClient(anonClient, null);
-      const preview = await anonMt.invitations.preview(inv.token);
-      assert.equal(preview.valid, true);
-      assert.equal(preview.tenant_id, tenantAId);
-      assert.ok(preview.email_masked.includes("***"));
-      assert.ok(preview.grants.some((g) => g.role === "manager"));
+    await t.test("global and DBA tenant-specific roles are listed only in their tenant", async () => {
+      const ownRoles = await rpc<Role[]>(owner.client, "context", {
+        p_tenant_id: tenantId, p_section: "roles", p_limit: 100,
+      });
+      assert.ok(ownRoles.some((role) => role.key === "e2e_writer" && role.tenant_id === null));
+      assert.ok(ownRoles.some((role) => role.key === tenantRoleKey && role.tenant_id === tenantId));
+      const foreignRoles = await rpc<Role[]>(outsider.client, "context", {
+        p_tenant_id: otherTenantId, p_section: "roles", p_limit: 100,
+      });
+      assert.ok(foreignRoles.some((role) => role.key === "e2e_writer"));
+      assert.equal(foreignRoles.some((role) => role.key === tenantRoleKey), false);
 
-      // User B (email mismatch) attempts to accept managerA's invite
-      await assert.rejects(
-        async () => userB.mt.invitations.accept(inv.token),
-        (err: unknown) => err instanceof MultitenancyError && err.code === "EMAIL_MISMATCH"
+      const firstPage = await rpc<{ items: Role[]; nextCursor: string | null }>(owner.client, "context_page", {
+        p_tenant_id: tenantId, p_section: "roles", p_limit: 1,
+      });
+      assert.equal(firstPage.items.length, 1);
+      assert.ok(firstPage.nextCursor, "keyset page supplies an opaque continuation");
+      const secondPage = await rpc<{ items: Role[]; nextCursor: string | null }>(owner.client, "context_page", {
+        p_tenant_id: tenantId, p_section: "roles", p_cursor: firstPage.nextCursor, p_limit: 1,
+      });
+      assert.equal(secondPage.items.length, 1);
+      assert.notEqual(firstPage.items[0]?.id, secondPage.items[0]?.id);
+      const badCursor = await rpcFailure(owner.client, "context_page", {
+        p_tenant_id: tenantId, p_section: "roles", p_cursor: "not-an-opaque-cursor", p_limit: 1,
+      });
+      assert.equal(badCursor.code, "22023");
+      assert.match(badCursor.message, /INVALID_CURSOR/);
+    });
+
+    const roleList = await rpc<Role[]>(owner.client, "context", {
+      p_tenant_id: tenantId, p_section: "roles", p_limit: 100,
+    });
+    const writerRole = roleList.find((role) => role.key === "e2e_writer");
+    const managerRole = roleList.find((role) => role.key === "e2e_manager");
+    assert.ok(writerRole && managerRole, "global DBA roles are visible");
+
+    const writerInvitation = await rpc<{ token: string }>(owner.client, "admin", {
+      p_tenant_id: tenantId, p_command: "invitation.create",
+      p_payload: { email: writer.email, grants: [{ role_id: writerRole.id, scope_id: scopeOne.id }] },
+    });
+    const writerSecondClient = await login(writer.email);
+    const accepted = await Promise.all([
+      rpc<{ membership_id: string }>(writer.client, "accept_invitation", { p_token: writerInvitation.token }),
+      rpc<{ membership_id: string }>(writerSecondClient, "accept_invitation", { p_token: writerInvitation.token }),
+    ]);
+    assert.equal(accepted[0].membership_id, accepted[1].membership_id, "concurrent acceptance is idempotent");
+
+    await t.test("grant references reject foreign roles/scopes and keep existing assignments", async () => {
+      const writerMembership = memberFor(await members(owner, tenantId), writer.id);
+      const deniedPayloads = [
+        { role_id: foreignTenantRoleId, scope_id: scopeOne.id },
+        { role_key: foreignTenantRoleKey, scope_id: scopeOne.id },
+        { role_id: writerRole.id, scope_id: foreignScope.id },
+        { scope_id: scopeOne.id },
+        { role_id: writerRole.id, role_key: "e2e_writer", scope_id: scopeOne.id },
+      ];
+      for (const grants of deniedPayloads) {
+        const denied = await rpcFailure(owner.client, "admin", {
+          p_tenant_id: tenantId,
+          p_command: "member.set_grants",
+          p_payload: { membership_id: writerMembership.id, grants: [grants] },
+        });
+        assert.equal(denied.code, "22P02");
+      }
+      const afterFailures = memberFor(await members(owner, tenantId), writer.id);
+      assert.ok(
+        afterFailures.grants?.some((grant) => grant.role_id === writerRole.id),
+        "grant validation runs before replacing assignments",
       );
-
-      // managerA accepts
-      const accepted = await managerA.mt.invitations.accept(inv.token);
-      assert.equal(accepted.tenant_id, tenantAId);
-      assert.ok(accepted.membership_id);
-
-      // Idempotent re-accept by managerA
-      const reaccepted = await managerA.mt.invitations.accept(inv.token);
-      assert.equal(reaccepted.membership_id, accepted.membership_id);
-
-      // Invitation revoke test
-      const dummyEmail = `revoke-test-${runId}@example.com`;
-      const invToRevoke = await ownerA.mt.invitations.create(tenantAId, {
-        email: dummyEmail,
-        grants: [],
-      });
-      await ownerA.mt.invitations.revoke(tenantAId, invToRevoke.invitation_id);
-
-      await assert.rejects(
-        async () => anonMt.invitations.preview(invToRevoke.token),
-        (err: unknown) => err instanceof MultitenancyError && err.code === "TOKEN_REVOKED"
-      );
-    }
-  );
-
-  await t.test("6. Context sections inspection (multitenancy.context)", async () => {
-    const selfCtx = await ownerA.mt.tenants.getSelf(tenantAId);
-    assert.equal(selfCtx.is_owner, true);
-    assert.equal(selfCtx.tenant.id, tenantAId);
-
-    const perms = await ownerA.mt.permissions.list(tenantAId);
-    assert.ok(perms.some((p) => p.key === "multitenancy.members.manage"));
-    assert.ok(perms.some((p) => p.key === "documents.read"));
-
-    const members = await ownerA.mt.members.list(tenantAId);
-    assert.ok(members.length >= 2, "Owner and Manager are in members list");
-
-    const audit = await ownerA.mt.audit.list(tenantAId);
-    assert.ok(audit.length >= 2, "Audit contains events");
-    assert.ok(audit.some((a) => a.command === "tenant.create"));
-    assert.ok(audit.some((a) => a.command === "invitation.create"));
-  });
-
-  await t.test("7. Member role assignment and Anti-Escalation check", async () => {
-    // Owner invites memberA with editor role scoped to Scope 1
-    const invMember = await ownerA.mt.invitations.create(tenantAId, {
-      email: memberA.email,
-      grants: [{ role_id: editorRoleId, scope_id: scope1Id }],
     });
-    const acceptedMember = await memberA.mt.invitations.accept(invMember.token);
-    const memberMembershipId = acceptedMember.membership_id;
 
-    // Verify member has the scoped grant
-    const members = await ownerA.mt.members.list(tenantAId);
-    const memberRecord = members.find((m) => m.id === memberMembershipId);
-    assert.ok(memberRecord);
-    assert.ok(
-      memberRecord.grants?.some((g) => g.role_id === editorRoleId && g.scope_id === scope1Id)
-    );
+    await inviteAndAccept(owner, tenantReader, tenantId, [{ role_key: tenantRoleKey, scope_id: scopeOne.id }]);
+    await inviteAndAccept(owner, delegatedAdmin, tenantId, [{ role_key: "e2e_limited_admin", scope_id: null }]);
 
-    // Manager A (who has multitenancy.members.manage but NOT documents.create/update/delete)
-    // attempts to grant editor role to another member -> must be rejected by ROLE_ESCALATION
-    await assert.rejects(
-      async () =>
-        managerA.mt.members.setGrants(tenantAId, memberMembershipId, [
-          { role_id: editorRoleId, scope_id: scope1Id },
-        ]),
-      (err: unknown) => err instanceof MultitenancyError && err.code === "ROLE_ESCALATION"
-    );
-  });
-
-  await t.test("8. UI Authorization helper (multitenancy.can)", async () => {
-    // Owner has bypass (all permissions)
-    assert.equal(await ownerA.mt.can(tenantAId, "documents.read"), true);
-    assert.equal(await ownerA.mt.can(tenantAId, "multitenancy.tenant.manage"), true);
-
-    // Member A has documents.read on Scope 1
-    assert.equal(await memberA.mt.can(tenantAId, "documents.read", [scope1Id]), true);
-    // Member A does NOT have documents.read on Scope 2
-    assert.equal(await memberA.mt.can(tenantAId, "documents.read", [scope2Id]), false);
-
-    // Outsider User B has no access to Tenant A
-    assert.equal(await userB.mt.can(tenantAId, "documents.read"), false);
-  });
-
-  await t.test(
-    "9. PostgREST Application Table RLS and Trigger Protection (public.documents)",
-    async () => {
-      // 1. Owner A inserts Document 1 in Scope 1
-      const { data: doc1, error: doc1Err } = await ownerA.client
-        .from("documents")
-        .insert({
-          tenant_id: tenantAId,
-          project_id: scope1Id,
-          author_id: ownerA.id,
-          title: "Owner Doc 1",
-          body: "Initial content",
-        })
-        .select()
-        .single();
-      assert.ifError(doc1Err);
-      assert.equal(doc1.title, "Owner Doc 1");
-
-      // 2. Member A inserts Document 2 in Scope 1 (allowed by documents.create: own)
-      const { data: doc2, error: doc2Err } = await memberA.client
-        .from("documents")
-        .insert({
-          tenant_id: tenantAId,
-          project_id: scope1Id,
-          author_id: memberA.id,
-          title: "Member Doc 2",
-          body: "Created by Member A",
-        })
-        .select()
-        .single();
-      assert.ifError(doc2Err);
-      assert.equal(doc2.title, "Member Doc 2");
-
-      // 3. Member A attempts to insert Document in Scope 2 (denied by RLS)
-      const { error: deniedInsertErr } = await memberA.client.from("documents").insert({
-        tenant_id: tenantAId,
-        project_id: scope2Id,
-        author_id: memberA.id,
-        title: "Forbidden Doc",
+    await t.test("scope, own/all, and cross-tenant PostgREST isolation hold", async () => {
+      const ownerOne = await owner.client.from("documents").insert({
+        tenant_id: tenantId, project_id: scopeOne.id, author_id: owner.id, title: "owner scope one",
+      }).select("id, tenant_id, project_id").single();
+      assert.ifError(ownerOne.error);
+      assert.ok(ownerOne.data);
+      const ownerTwo = await owner.client.from("documents").insert({
+        tenant_id: tenantId, project_id: scopeTwo.id, author_id: owner.id, title: "owner scope two",
+      }).select("id").single();
+      assert.ifError(ownerTwo.error);
+      assert.ok(ownerTwo.data);
+      const ownInsert = await writer.client.from("documents").insert({
+        tenant_id: tenantId, project_id: scopeOne.id, author_id: writer.id, title: "writer scope one",
+      }).select("id, project_id").single();
+      assert.ifError(ownInsert.error);
+      assert.ok(ownInsert.data);
+      const writerRows = await writer.client.from("documents").select("id").eq("tenant_id", tenantId);
+      assert.ifError(writerRows.error);
+      assert.deepEqual(writerRows.data?.map((row) => row.id), [ownInsert.data.id]);
+      const wrongScope = await writer.client.from("documents").insert({
+        tenant_id: tenantId, project_id: scopeTwo.id, author_id: writer.id, title: "writer wrong scope",
       });
-      assert.ok(deniedInsertErr, "Insert into Scope 2 denied for Member A");
-
-      // 4. Member A reads documents in Scope 1 (documents.read: all allows reading all docs in scope)
-      const { data: memberReadDocs, error: memberReadErr } = await memberA.client
-        .from("documents")
-        .select("*")
-        .eq("tenant_id", tenantAId)
-        .eq("project_id", scope1Id);
-      assert.ifError(memberReadErr);
-      assert.equal(memberReadDocs.length, 2, "Member A can read all docs in Scope 1");
-
-      // 5. Member A updates own document (doc2) -> Allowed
-      const { error: updateOwnErr } = await memberA.client
-        .from("documents")
-        .update({ title: "Member Doc 2 Updated" })
-        .eq("id", doc2.id);
-      assert.ifError(updateOwnErr);
-
-      // 6. Member A attempts to update Owner A's document (doc1) -> Denied by RLS (0 rows updated)
-      const { data: updateOtherResult, error: updateOtherErr } = await memberA.client
-        .from("documents")
-        .update({ title: "Hacked Doc 1" })
-        .eq("id", doc1.id)
-        .select();
-      assert.ifError(updateOtherErr);
-      assert.equal(updateOtherResult?.length, 0, "Member A cannot update Doc 1 (not author)");
-
-      // 7. Cross-tenant isolation: User B queries documents -> receives 0 rows
-      const { data: userBDocs, error: userBReadErr } = await userB.client
-        .from("documents")
-        .select("*")
-        .eq("tenant_id", tenantAId);
-      assert.ifError(userBReadErr);
-      assert.equal(userBDocs?.length, 0, "User B cannot read Tenant A documents");
-
-      // 8. Cross-tenant isolation: User B insert into Tenant A is denied
-      const { error: userBInsertErr } = await userB.client.from("documents").insert({
-        tenant_id: tenantAId,
-        project_id: scope1Id,
-        author_id: userB.id,
-        title: "Cross-Tenant Doc",
+      assert.ok(wrongScope.error, "scope-specific role cannot create in another scope");
+      const specialRows = await tenantReader.client.from("documents").select("id").eq("tenant_id", tenantId);
+      assert.ifError(specialRows.error);
+      assert.ok(specialRows.data?.some((row) => row.id === ownerOne.data.id), "tenant-specific all role reads its scope");
+      assert.equal(specialRows.data?.some((row) => row.id === ownerTwo.data.id), false, "tenant-specific role cannot read another scope");
+      const outsiderRead = await outsider.client.from("documents").select("id").eq("tenant_id", tenantId);
+      assert.ifError(outsiderRead.error);
+      assert.equal(outsiderRead.data?.length ?? 0, 0, "other tenant sees no rows");
+      const outsiderInsert = await outsider.client.from("documents").insert({
+        tenant_id: tenantId, project_id: scopeOne.id, author_id: outsider.id, title: "cross tenant",
       });
-      assert.ok(userBInsertErr, "User B insert into Tenant A rejected by RLS");
+      assert.ok(outsiderInsert.error, "other tenant cannot write rows");
+    });
 
-      // 9. Immutable keys trigger: Owner A attempts to move document to Tenant B
-      const { error: moveTenantErr } = await ownerA.client
-        .from("documents")
-        .update({ tenant_id: tenantBId })
-        .eq("id", doc1.id);
-      assert.ok(moveTenantErr, "Moving document across tenants blocked by trigger");
-    }
-  );
+    await t.test("protected tenant and scope keys cannot be transferred", async () => {
+      const owned = await owner.client.from("documents").select("id").eq("tenant_id", tenantId).eq("project_id", scopeOne.id).eq("author_id", owner.id).single();
+      assert.ifError(owned.error);
+      assert.ok(owned.data);
+      const moveScope = await owner.client.from("documents").update({ project_id: scopeTwo.id }).eq("id", owned.data.id);
+      assert.ok(moveScope.error);
+      assert.match(moveScope.error.message, /PROTECTED_KEY_IMMUTABLE/);
+      const moveTenant = await owner.client.from("documents").update({ tenant_id: otherTenantId }).eq("id", owned.data.id);
+      assert.ok(moveTenant.error);
+      assert.match(moveTenant.error.message, /PROTECTED_KEY_IMMUTABLE/);
+    });
 
-  await t.test("10. Membership suspension, reactivation, and removal", async () => {
-    const members = await ownerA.mt.members.list(tenantAId);
-    const memberRecord = members.find((m) => m.user_id === memberA.id);
-    assert.ok(memberRecord);
+    await t.test("delegated admins cannot escalate grants or mutate DBA role definitions", async () => {
+      const writerMembership = memberFor(await members(owner, tenantId), writer.id);
+      const escalation = await rpcFailure(delegatedAdmin.client, "admin", {
+        p_tenant_id: tenantId, p_command: "member.set_grants",
+        p_payload: { membership_id: writerMembership.id, grants: [{ role_id: managerRole.id, scope_id: null }] },
+      });
+      assert.equal(escalation.code, "42501");
+      assert.match(escalation.message, /ROLE_ESCALATION/);
+      const afterFailure = memberFor(await members(owner, tenantId), writer.id);
+      assert.ok(afterFailure.grants?.some((grant) => grant.role_id === writerRole.id), "failed escalation keeps previous grants");
+      const roleMutation = await rpcFailure(owner.client, "admin", {
+        p_tenant_id: tenantId, p_command: "role.create", p_payload: { key: "not-allowed" },
+      });
+      assert.equal(roleMutation.code, "42501");
+      assert.match(roleMutation.message, /DBA-managed/);
+    });
 
-    // Suspend member
-    const suspended = await ownerA.mt.members.suspend(tenantAId, memberRecord.id);
-    assert.equal(suspended.status, "suspended");
+    await t.test("suspend and remove immediately revoke a live session", async () => {
+      const writerMembership = memberFor(await members(owner, tenantId), writer.id);
+      const suspended = await rpc<{ status: string }>(owner.client, "admin", {
+        p_tenant_id: tenantId, p_command: "member.suspend", p_payload: { membership_id: writerMembership.id },
+      });
+      assert.equal(suspended.status, "suspended");
+      const suspendedRead = await writer.client.from("documents").select("id").eq("tenant_id", tenantId);
+      assert.ifError(suspendedRead.error);
+      assert.equal(suspendedRead.data?.length ?? 0, 0);
+      const reactivated = await rpc<{ status: string }>(owner.client, "admin", {
+        p_tenant_id: tenantId, p_command: "member.reactivate", p_payload: { membership_id: writerMembership.id },
+      });
+      assert.equal(reactivated.status, "active");
+      const restoredRead = await writer.client.from("documents").select("id").eq("tenant_id", tenantId);
+      assert.ifError(restoredRead.error);
+      assert.equal(restoredRead.data?.length, 1, "active membership restores the existing grant");
+      const removed = await rpc<{ status: string }>(owner.client, "admin", {
+        p_tenant_id: tenantId, p_command: "member.remove", p_payload: { membership_id: writerMembership.id },
+      });
+      assert.equal(removed.status, "removed");
+      const removedRead = await writer.client.from("documents").select("id").eq("tenant_id", tenantId);
+      assert.ifError(removedRead.error);
+      assert.equal(removedRead.data?.length ?? 0, 0);
+    });
 
-    // Suspended member cannot access context
-    await assert.rejects(
-      async () => memberA.mt.tenants.getSelf(tenantAId),
-      (err: unknown) => err instanceof MultitenancyError && err.code === "FORBIDDEN"
-    );
+    await t.test("invitation acceptance serializes concurrent browser clients", async () => {
+      const invitation = await rpc<{ token: string }>(owner.client, "admin", {
+        p_tenant_id: tenantId, p_command: "invitation.create",
+        p_payload: { email: concurrentInvitee.email, grants: [{ role_key: "e2e_writer", scope_id: scopeOne.id }] },
+      });
+      const secondClient = await login(concurrentInvitee.email);
+      const concurrent = await Promise.all([
+        rpc<{ membership_id: string }>(concurrentInvitee.client, "accept_invitation", { p_token: invitation.token }),
+        rpc<{ membership_id: string }>(secondClient, "accept_invitation", { p_token: invitation.token }),
+      ]);
+      assert.equal(concurrent[0].membership_id, concurrent[1].membership_id);
+      const inviteeMembers = (await members(owner, tenantId)).filter((member) => member.user_id === concurrentInvitee.id);
+      assert.equal(inviteeMembers.length, 1, "concurrent accept created exactly one membership");
+    });
 
-    // Reactivate member
-    const reactivated = await ownerA.mt.members.reactivate(tenantAId, memberRecord.id);
-    assert.equal(reactivated.status, "active");
-
-    // Remove member
-    const removed = await ownerA.mt.members.remove(tenantAId, memberRecord.id);
-    assert.equal(removed.status, "removed");
-  });
-
-  await t.test("11. Tenant deactivation, reactivation, and ownership transfer", async () => {
-    // Deactivate tenant
-    const deactivated = await ownerA.mt.tenants.deactivate(tenantAId);
-    assert.equal(deactivated.is_active, false);
-
-    // Reactivate tenant
-    const reactivated = await ownerA.mt.tenants.reactivate(tenantAId);
-    assert.equal(reactivated.is_active, true);
-
-    // Transfer ownership to managerA (active member)
-    const transferred = await ownerA.mt.tenants.transferOwnership(tenantAId, managerA.id);
-    assert.equal(transferred.owner_user_id, managerA.id);
-
-    // managerA is now the owner
-    const newSelf = await managerA.mt.tenants.getSelf(tenantAId);
-    assert.equal(newSelf.is_owner, true);
-
-    // Previous owner can no longer transfer ownership
-    await assert.rejects(
-      async () => ownerA.mt.tenants.transferOwnership(tenantAId, memberA.id),
-      (err: unknown) => err instanceof MultitenancyError && err.code === "FORBIDDEN"
-    );
-  });
-
-  await t.test("12. Audit Log Invariants (Append-only protection)", async () => {
-    // Verify audit log has recorded administrative history
-    const auditEvents = await managerA.mt.audit.list(tenantAId);
-    assert.ok(auditEvents.length > 5, "Audit contains events");
-
-    // Attempting to UPDATE or DELETE audit_events is blocked by trigger
-    assert.throws(() => {
-      runDbaSql(`delete from multitenancy.audit_events where tenant_id = '${tenantAId}'::uuid`);
+    await t.test("revoked invitation cannot be accepted by its authenticated recipient", async () => {
+      const invitation = await rpc<{ invitation_id: string; token: string }>(owner.client, "admin", {
+        p_tenant_id: tenantId, p_command: "invitation.create",
+        p_payload: { email: revokedInvitee.email, grants: [{ role_key: "e2e_writer", scope_id: scopeOne.id }] },
+      });
+      const revoked = await rpc<{ revoked: boolean }>(owner.client, "admin", {
+        p_tenant_id: tenantId, p_command: "invitation.revoke", p_payload: { invitation_id: invitation.invitation_id },
+      });
+      assert.equal(revoked.revoked, true);
+      const denied = await rpcFailure(revokedInvitee.client, "accept_invitation", { p_token: invitation.token });
+      assert.equal(denied.code, "28000");
+      assert.match(denied.message, /TOKEN_REVOKED/);
     });
   });
-
-  await t.test("13. Cleanup test data", async () => {
-    const usersToDelete = [ownerA?.id, managerA?.id, memberA?.id, userB?.id].filter(Boolean);
-    for (const uid of usersToDelete) {
-      await adminClient.auth.admin.deleteUser(uid);
-    }
-  });
-});
+}

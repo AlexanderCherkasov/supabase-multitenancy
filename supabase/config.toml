@@ -1,0 +1,19 @@
+# Disposable local stack used by the integration gate.
+# `api` is the only package-owned schema exposed through PostgREST.
+project_id = "supabase-multitenancy"
+
+[api]
+enabled = true
+schemas = ["public", "api"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 15
+
+[auth]
+enabled = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false

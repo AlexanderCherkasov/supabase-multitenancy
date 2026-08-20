@@ -29,10 +29,25 @@ test("roles are read-only and fetched through context", async () => {
 
   const roles = await client.roles.list("tenant-1");
   assert.equal(roles[0].key, "editor");
-  assert.deepEqual(Object.keys(client.roles), ["list"]);
+  assert.deepEqual(Object.keys(client.roles), ["list", "listPage"]);
   assert.deepEqual(calls[0], {
     fn: "context",
-    params: { p_tenant_id: "tenant-1", p_section: "roles", p_cursor: null, p_limit: 50 },
+    params: { p_tenant_id: "tenant-1", p_section: "roles", p_limit: 50 },
+  });
+});
+
+test("listPage uses context_page and returns an opaque cursor", async () => {
+  const calls: Array<{ fn: string; params: Record<string, unknown> }> = [];
+  const client = createMultitenancyClient(mockClient((fn, params) => {
+    calls.push({ fn, params });
+    return { items: [{ key: "editor" }], next_cursor: "next" };
+  }));
+
+  const page = await client.roles.listPage("tenant-1", "cursor", 10);
+  assert.deepEqual(page, { items: [{ key: "editor" }], nextCursor: "next" });
+  assert.deepEqual(calls[0], {
+    fn: "context_page",
+    params: { p_tenant_id: "tenant-1", p_section: "roles", p_cursor: "cursor", p_limit: 10 },
   });
 });
 
@@ -46,6 +61,14 @@ test("member grant assignment uses the single admin RPC", async () => {
   await client.members.setGrants("tenant-1", "member-1", [{ role_id: "role-1", scope_id: null }]);
   assert.equal(calls[0].fn, "admin");
   assert.equal(calls[0].params.p_command, "member.set_grants");
+});
+
+test("grant references require exactly one role id or key", async () => {
+  const client = createMultitenancyClient(mockClient(() => ({})));
+  await assert.rejects(
+    () => client.members.setGrants("tenant-1", "member-1", [{ role_id: "r1", role_key: "editor" } as never]),
+    (error: unknown) => error instanceof TypeError
+  );
 });
 
 test("can unwraps the versioned RPC envelope", async () => {

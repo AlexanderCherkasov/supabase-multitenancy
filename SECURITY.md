@@ -2,7 +2,7 @@
 
 ## Supported version
 
-Only the latest pre-release version is supported. Version 0.1 used a dynamic row-check design and must not be deployed.
+Only `v0.3.x` is supported. This is a fresh pre-production baseline; reset disposable older installs before applying it. No v0.2 upgrade path is promised.
 
 ## Reporting
 
@@ -10,11 +10,12 @@ Report suspected tenant-isolation, privilege-escalation, invitation-token, or RP
 
 ## Security invariants
 
-- `multitenancy` is not an exposed API schema.
+- `multitenancy` is private and is not an exposed Data API schema; client RPCs and RLS helpers are exposed only through `api`.
 - App tables containing tenant data have RLS enabled and no bypass grants for client roles.
 - Every protected row has a tenant foreign key; scoped rows use a composite tenant/scope foreign key.
 - Role data contains permission keys and `own|all` levels only.
 - Role definitions and role permissions are DBA-managed and have no public mutation RPC.
+- Roles are global when `tenant_id` is NULL. A non-NULL `tenant_id` denotes a rare DBA-only role usable only in that tenant; `role_assignments` remain tenant-bound.
 - No tenant-controlled SQL identifier is dynamically executed by a privileged function.
 - Custom row predicates are application-owned, schema-qualified, reviewed migrations and remain `SECURITY INVOKER`.
 - Every `SECURITY DEFINER` function uses `set search_path = ''` and explicitly qualified relations.

@@ -44,24 +44,30 @@ Apply [`01_permissions_and_roles.sql`](file:///Users/alexander/dev/supabase-tena
 Apply [`02_documents_table_and_rls.sql`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/1-saas-starter-documents/02_documents_table_and_rls.sql):
 
 - Creates `public.documents` with `tenant_id`, `project_id`, and `author_id`.
-- Attaches the immutability trigger `multitenancy.enforce_protected_keys_immutable('project_id')`.
+- Attaches the immutability trigger `api.enforce_protected_keys_immutable('project_id')`.
 - Enforces strict RLS policies:
   - **Read (`SELECT`)**:
     ```sql
     using (
-      case multitenancy.access_level(tenant_id, 'documents.read', array[project_id])
-        when 'all' then true
-        when 'own' then author_id = auth.uid()
-        else false
-      end
-    )
-    ```
-  - **Insert (`INSERT`)**: Must have permission and match `author_id = auth.uid()`.
-  - **Update (`UPDATE`)**: `own` can edit only their own rows, `all` can edit any row.
-  - **Delete (`DELETE`)**: Restricted to `all` access level (managers & owners).
+      case api.access_level(tenant_id, 'documents.read', array[project_id])
+Apply [`01_permissions_and_roles.sql`](file:///Users/alexander/dev/supabase-multitenancy/examples/1-saas-starter-documents/01_permissions_and_roles.sql):
+
+```bash
+psql $DATABASE_URL -f examples/1-saas-starter-documents/01_permissions_and_roles.sql
+```
 
 ---
 
-## Step 3: Run the Workflow in TypeScript or Python
+## Step 2: Application Schema & RLS Policies
 
-See [`workflow_example.ts`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/1-saas-starter-documents/workflow_example.ts) or [`workflow_example.py`](file:///Users/alexander/dev/supabase-tenant-rbac/examples/1-saas-starter-documents/workflow_example.py) for the complete integration flow.
+Apply [`02_documents_table_and_rls.sql`](file:///Users/alexander/dev/supabase-multitenancy/examples/1-saas-starter-documents/02_documents_table_and_rls.sql):
+
+```bash
+psql $DATABASE_URL -f examples/1-saas-starter-documents/02_documents_table_and_rls.sql
+```
+
+---
+
+## 💻 Running the Example Workflow
+
+See [`workflow_example.ts`](file:///Users/alexander/dev/supabase-multitenancy/examples/1-saas-starter-documents/workflow_example.ts) or [`workflow_example.py`](file:///Users/alexander/dev/supabase-multitenancy/examples/1-saas-starter-documents/workflow_example.py) for the complete integration flow.

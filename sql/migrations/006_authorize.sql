@@ -1,5 +1,5 @@
 -- 006_authorize.sql
--- supabase-multitenancy v0.2.0 — Authorization helpers and internal RLS lockdown
+-- supabase-multitenancy v0.3.0 — Authorization helpers and internal RLS lockdown
 -- Purpose: Resolve a user's effective permission level without inspecting app rows.
 -- Dependencies: 002_identities, 003_rbac, 004_invitations, 005_audit
 
@@ -64,15 +64,15 @@ begin
     where t.id = p_tenant_id and t.is_active
   ) then return 'none'; end if;
 
-  if exists (
-    select 1 from multitenancy.tenants t
-    where t.id = p_tenant_id and t.owner_user_id = v_uid
-  ) then return 'all'; end if;
-
   select m.id into v_membership_id
   from multitenancy.memberships m
   where m.tenant_id = p_tenant_id and m.user_id = v_uid and m.status = 'active';
   if v_membership_id is null then return 'none'; end if;
+
+  if exists (
+    select 1 from multitenancy.tenants t
+    where t.id = p_tenant_id and t.owner_user_id = v_uid
+  ) then return 'all'; end if;
 
   if p_scope_ids is null or cardinality(p_scope_ids) = 0 then
     select max(case rp.access_level when 'all' then 2 when 'own' then 1 else 0 end)
@@ -80,6 +80,7 @@ begin
     from multitenancy.role_assignments ra
     join multitenancy.role_permissions rp on rp.role_id = ra.role_id
     where ra.membership_id = v_membership_id
+      and ra.tenant_id = p_tenant_id
       and ra.scope_id is null
       and rp.permission_id = v_permission_id;
     return case coalesce(v_rank, 0) when 2 then 'all' when 1 then 'own' else 'none' end;
@@ -98,6 +99,7 @@ begin
     from multitenancy.role_assignments ra
     join multitenancy.role_permissions rp on rp.role_id = ra.role_id
     where ra.membership_id = v_membership_id
+      and ra.tenant_id = p_tenant_id
       and (ra.scope_id is null or ra.scope_id = v_scope_id)
       and rp.permission_id = v_permission_id;
 

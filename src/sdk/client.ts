@@ -5,6 +5,7 @@ import type {
   AuditEvent,
   ContextDataMap,
   ContextSection,
+  Page,
   Grant,
   InvitationPreview,
   InvitationSummary,
@@ -18,7 +19,6 @@ import type {
 } from "./types.js";
 
 export interface ContextOptions {
-  cursor?: string | null;
   limit?: number;
 }
 
@@ -26,11 +26,14 @@ export interface ClientOptions {
   schema?: string;
 }
 
+type ContextItem<S extends Exclude<ContextSection, "self">> =
+  ContextDataMap[S] extends Array<infer Item> ? Item : never;
+
 export function createMultitenancyClient<AppPermission extends string = string>(
   supabase: SupabaseClient,
   clientOptions?: ClientOptions
 ) {
-  const schemaName = clientOptions?.schema ?? "multitenancy";
+  const schemaName = clientOptions?.schema ?? "api";
   const api = typeof supabase.schema === "function" ? supabase.schema(schemaName) : supabase;
 
   async function rpc<T>(fn: string, params: Record<string, unknown>): Promise<T> {
@@ -52,9 +55,33 @@ export function createMultitenancyClient<AppPermission extends string = string>(
     return rpc<ContextDataMap[S]>("context", {
       p_tenant_id: tenantId,
       p_section: section,
-      p_cursor: options.cursor ?? null,
       p_limit: options.limit ?? 50,
     });
+  }
+
+  async function contextPage<S extends Exclude<ContextSection, "self">>(
+    tenantId: string,
+    section: S,
+    cursor: string | null = null,
+    limit = 50
+  ): Promise<Page<ContextItem<S>>> {
+    const page = await rpc<{ items: ContextDataMap[S]; nextCursor?: string | null; next_cursor?: string | null }>("context_page", {
+      p_tenant_id: tenantId,
+      p_section: section,
+      p_cursor: cursor,
+      p_limit: limit,
+    });
+    return { items: page.items as ContextItem<S>[], nextCursor: page.nextCursor ?? page.next_cursor ?? null };
+  }
+
+  function validateGrants(grants: Grant[]): void {
+    for (const grant of grants) {
+      const hasRoleId = typeof grant.role_id === "string" && grant.role_id.length > 0;
+      const hasRoleKey = typeof grant.role_key === "string" && grant.role_key.length > 0;
+      if (hasRoleId === hasRoleKey) {
+        throw new TypeError("Each grant must specify exactly one of role_id or role_key");
+      }
+    }
   }
 
   async function admin<T = unknown>(tenantId: string, command: AdminCommand): Promise<T> {
@@ -67,6 +94,7 @@ export function createMultitenancyClient<AppPermission extends string = string>(
 
   return {
     context,
+    contextPage,
     admin,
 
     async createTenant(input: { slug: string; name: string }): Promise<{ tenant_id: string; slug: string; name: string }> {
@@ -93,6 +121,9 @@ export function createMultitenancyClient<AppPermission extends string = string>(
       async list(tenantId: string, options?: ContextOptions): Promise<Permission[]> {
         return context(tenantId, "permissions", options);
       },
+      async listPage(tenantId: string, cursor?: string | null, limit?: number) {
+        return contextPage(tenantId, "permissions", cursor, limit);
+      },
     },
 
     roles: {
@@ -100,11 +131,17 @@ export function createMultitenancyClient<AppPermission extends string = string>(
       async list(tenantId: string, options?: ContextOptions): Promise<Role[]> {
         return context(tenantId, "roles", options);
       },
+      async listPage(tenantId: string, cursor?: string | null, limit?: number) {
+        return contextPage(tenantId, "roles", cursor, limit);
+      },
     },
 
     scopes: {
       async list(tenantId: string, options?: ContextOptions): Promise<Scope[]> {
         return context(tenantId, "scopes", options);
+      },
+      async listPage(tenantId: string, cursor?: string | null, limit?: number) {
+        return contextPage(tenantId, "scopes", cursor, limit);
       },
       async create(tenantId: string, input: { kind: string; key: string; name: string; metadata?: Record<string, unknown> }): Promise<Scope> {
         return admin(tenantId, { command: "scope.create", payload: input });
@@ -121,7 +158,11 @@ export function createMultitenancyClient<AppPermission extends string = string>(
       async list(tenantId: string, options?: ContextOptions): Promise<Membership[]> {
         return context(tenantId, "members", options);
       },
+      async listPage(tenantId: string, cursor?: string | null, limit?: number) {
+        return contextPage(tenantId, "members", cursor, limit);
+      },
       async setGrants(tenantId: string, membershipId: string, grants: Grant[]) {
+        validateGrants(grants);
         return admin<{ membership_id: string; grants: Grant[] }>(tenantId, {
           command: "member.set_grants",
           payload: { membership_id: membershipId, grants },
@@ -142,7 +183,11 @@ export function createMultitenancyClient<AppPermission extends string = string>(
       async list(tenantId: string, options?: ContextOptions): Promise<InvitationSummary[]> {
         return context(tenantId, "invitations", options);
       },
+      async listPage(tenantId: string, cursor?: string | null, limit?: number) {
+        return contextPage(tenantId, "invitations", cursor, limit);
+      },
       async create(tenantId: string, input: { email: string; grants: Grant[] }): Promise<{ invitation_id: string; token: string; expires_at: string }> {
+        validateGrants(input.grants);
         return admin(tenantId, { command: "invitation.create", payload: input });
       },
       async resend(tenantId: string, invitationId: string): Promise<{ invitation_id: string; token: string; expires_at: string }> {
@@ -162,6 +207,9 @@ export function createMultitenancyClient<AppPermission extends string = string>(
     audit: {
       async list(tenantId: string, options?: ContextOptions): Promise<AuditEvent[]> {
         return context(tenantId, "audit", options);
+      },
+      async listPage(tenantId: string, cursor?: string | null, limit?: number) {
+        return contextPage(tenantId, "audit", cursor, limit);
       },
     },
 
