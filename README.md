@@ -237,8 +237,6 @@ A common question is: **Can a Tenant Admin assign roles to members?**
 | **Invite New Members with Roles** | **Tenant Owner & Admins** | SDK (`invitations.create`) |
 | **Suspend / Reactivate / Remove Members** | **Tenant Owner & Admins** | SDK (`members.suspend`, `members.remove`) |
 
-> **Why are Roles DBA-Managed?**  
-> If tenant admins could create arbitrary roles, a compromised tenant account or UI vulnerability could create a "Super-Admin" role with full database bypass. In `supabase-multitenancy`, the DBA defines the fixed role catalog, and tenant admins safely assign users to those roles.
 
 ---
 
